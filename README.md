@@ -1,5 +1,10 @@
 # GrokkingMetrics
 
+**➡ Live site: <https://benmeyersusc.github.io/GrokkingMetrics/>** — the interactive
+dashboard: the circle algorithm taught interactively, the trained model running it live,
+and the full training instrumentation.
+
+
 Using my own [TTTN](https://github.com/benmeyersUSC/TTNN) C++ Machine Learning library, I
 reproduce Neel Nanda's grokking transformer results, profiling the model's learning of its
 algorithm through the lens of several different metrics — movement metrics (output-space
