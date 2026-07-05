@@ -24,8 +24,9 @@ button:hover{background:#f0f3f9}
 .dot{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:4px;vertical-align:middle}
 </style></head><body>
 <header><h1>The Circle Algorithm</h1>
-<p>Interactive companion to the grokked mod-113 network. Four pictures: the winding map,
-the dials that store it, the DFT that finds it, and the interference that answers with it.</p>
+<p>Interactive companion to the grokked mod-113 network. Five pictures: the winding map,
+the dials that store it, the DFT that finds it, the interference that answers with it —
+and the whole algorithm run end-to-end in plain code, no network anywhere.</p>
 </header><div class="wrap">
 
 <!-- ══════════ PANEL A ══════════ -->
@@ -110,6 +111,33 @@ a confident one.</p>
 <canvas id="cvD" width="1050" height="300"></canvas>
 <div class="legend" id="Dinfo"></div>
 </div>
+
+<!-- ══════════ PANEL E ══════════ -->
+<div class="card"><h2>5 · The whole algorithm, end to end (no network)</h2>
+<p class="sub">Everything the trained model does, executed in plain arithmetic — pick a,
+b, and one frequency k, then press run. <b>Embed</b>: a and b land on their pegs, angle =
+(k·x mod 113)/113 of a turn. <b>Add</b>: b's angle is laid onto the end of a's; if the
+sum passes a full turn it simply wraps — <i>the mod costs nothing, the circle does it</i>.
+<b>Decode</b>, two ways that must agree: score every candidate c by cos(θ<sub>sum</sub> −
+2πk·c/113) and take the argmax (what the unembedding does), or "ungear" algebraically —
+the sum sits on peg s = k·(a+b) mod 113, so c = k<sup>−1</sup>·s mod 113 (k has an inverse
+because 113 is prime). One frequency is already a complete, correct algorithm.</p>
+<div class="row"><div>
+<canvas id="cvE" width="430" height="430"></canvas>
+<div class="legend">
+<span class="dot" style="background:#1f77b4"></span>a's angle &nbsp;
+<span class="dot" style="background:#2ca02c"></span>+ b's angle &nbsp;
+<span class="dot" style="background:#d62728"></span>sum point</div>
+</div><div style="min-width:340px;flex:1">
+<div class="ctl">a <input type="range" id="Ea" min="0" max="112" value="9"><span class="val" id="EaV">9</span>
+ &nbsp; b <input type="range" id="Eb" min="0" max="112" value="38"><span class="val" id="EbV">38</span></div>
+<div class="ctl">k <input type="range" id="Ek" min="1" max="56" value="5"><span class="val" id="EkV">5</span>
+ &nbsp; <button id="Erun">▶ run the algorithm</button></div>
+<div class="legend" id="Einfo" style="font-size:13px;line-height:1.8"></div>
+<div style="margin-top:12px"><b style="font-size:13px">decode: score(c) = cos(θ<sub>sum</sub> − 2πk·c/113)</b><br>
+<canvas id="cvEd" width="560" height="170"></canvas>
+<div class="legend" id="Edec"></div></div>
+</div></div></div>
 
 </div><script>
 "use strict";
@@ -303,4 +331,82 @@ function drawD(){
 ["Da","Db"].forEach(id=>$(id).addEventListener("input",drawD));
 Dbox.addEventListener("change",drawD);
 drawD();
+
+/* ───────── Panel E ───────── */
+const cvE=$("cvE"),ctxE=cvE.getContext("2d"),cvEd=$("cvEd"),ctxEd=cvEd.getContext("2d");
+let Eraf=null;
+function kinv(k){for(let x=1;x<P;x++)if((k*x)%P===1)return x;return 0;}
+function drawE(p1,p2,p3){
+  const a=+$("Ea").value, b=+$("Eb").value, k=+$("Ek").value;
+  $("EaV").textContent=a; $("EbV").textContent=b; $("EkV").textContent=k;
+  const pa=(k*a)%P, pb=(k*b)%P, ps=(pa+pb)%P, cstar=(a+b)%P, ki=kinv(k);
+  const A=TAU*pa/P, B=TAU*pb/P;
+  const cx=215,cy=215,R=185;
+  ctxE.clearRect(0,0,430,430);
+  ctxE.strokeStyle="#dde3ee"; ctxE.beginPath(); ctxE.arc(cx,cy,R,0,TAU); ctxE.stroke();
+  ctxE.fillStyle="#c9d2e3";
+  for(let i=0;i<P;i++){const [x,y]=pegXY(i,cx,cy,R); ctxE.beginPath();ctxE.arc(x,y,2.2,0,TAU);ctxE.fill();}
+  const ring=(peg,col)=>{const [x,y]=pegXY(peg,cx,cy,R);
+    ctxE.strokeStyle=col; ctxE.lineWidth=1.7; ctxE.beginPath(); ctxE.arc(x,y,7.5,0,TAU); ctxE.stroke();};
+  ring(pa,"#1f77b4"); ring(pb,"#2ca02c");
+  // arcs: canvas angle for peg-angle t is t − π/2, clockwise = increasing peg index
+  const arc=(from,swept,r,col)=>{ if(swept<=1e-6) return;
+    ctxE.strokeStyle=col; ctxE.lineWidth=2.4; ctxE.beginPath();
+    ctxE.arc(cx,cy,r,from-Math.PI/2,from+Math.min(swept,TAU)-Math.PI/2,false); ctxE.stroke();};
+  arc(0, p1*A, R-13, "rgba(31,119,180,0.85)");
+  arc(A, p2*B, R-26, "rgba(44,160,44,0.85)");
+  // runner: sweeps a's angle, then continues through b's
+  const th=p1*A+p2*B;
+  if(p1>0){
+    const rr=(p2>0)?R-26:R-13;
+    const x=cx+rr*Math.cos(th-Math.PI/2), y=cy+rr*Math.sin(th-Math.PI/2);
+    ctxE.fillStyle=(p2>=1)?"#d62728":(p2>0?"#2ca02c":"#1f77b4");
+    ctxE.beginPath(); ctxE.arc(x,y,6,0,TAU); ctxE.fill();
+  }
+  if(p2>=1){ const [x,y]=pegXY(ps,cx,cy,R);
+    ctxE.fillStyle="#d62728"; ctxE.beginPath(); ctxE.arc(x,y,7,0,TAU); ctxE.fill();
+    ctxE.fillStyle="#111"; ctxE.font="12px sans-serif";
+    ctxE.fillText("peg "+ps, x+11, y-9); }
+  // narration
+  const wrap = pa+pb>=P;
+  const lines=[`<b>embed</b>: a=${a} → peg (${k}·${a}) mod 113 = <b>${pa}</b> (${pa}/113 turn)
+    &nbsp;·&nbsp; b=${b} → peg <b>${pb}</b> (${pb}/113 turn)`];
+  if(p2>=1) lines.push(`<b>add</b>: ${pa}/113 + ${pb}/113 = ${pa+pb}/113`
+    +(wrap?` → past a full turn → <b>${ps}/113</b> — the mod happened by itself`
+           :` = <b>${ps}/113</b> (no wrap needed this time)`));
+  if(p3>=1) lines.push(`<b>ungear</b>: peg ${ps} = k·c → c = k<sup>−1</sup>·${ps} =
+    ${ki}·${ps} mod 113 = <b>${cstar}</b> &nbsp;·&nbsp; truth: (${a}+${b}) mod 113 =
+    ${cstar} <span style='color:#1b7f3b'>✓</span>`);
+  $("Einfo").innerHTML=lines.join("<br>");
+  // decode curve
+  ctxEd.clearRect(0,0,560,170);
+  ctxEd.strokeStyle="#e3e7f0"; ctxEd.beginPath(); ctxEd.moveTo(15,85); ctxEd.lineTo(545,85); ctxEd.stroke();
+  const Xc=c=>15+530*c/(P-1), Yc=v=>85-62*v;
+  const n=Math.floor(p3*(P-1));
+  if(n>0){ ctxEd.strokeStyle="#1f77b4"; ctxEd.lineWidth=1.7; ctxEd.beginPath();
+    for(let c=0;c<=n;c++){ const v=Math.cos(TAU*(ps-k*c%P)/P);
+      c?ctxEd.lineTo(Xc(c),Yc(v)):ctxEd.moveTo(Xc(c),Yc(v)); } ctxEd.stroke(); }
+  if(p3>=1){ ctxEd.fillStyle="#d62728"; ctxEd.beginPath();
+    ctxEd.arc(Xc(cstar),Yc(1),5.5,0,TAU); ctxEd.fill();
+    ctxEd.fillStyle="#111"; ctxEd.font="12px sans-serif";
+    ctxEd.fillText(`argmax = ${cstar}`, Math.min(Xc(cstar)+9,480), Yc(1)+4);
+    $("Edec").innerHTML=`c* = <b>${cstar}</b> scores cos(0) = 1 — its peg is exactly where
+      the sum landed; every other candidate's peg misses by a nonzero angle.`;
+  } else $("Edec").innerHTML="";
+}
+function ErunAnim(){
+  if(Eraf)cancelAnimationFrame(Eraf);
+  const t0=performance.now(), D1=1000, D2=1300, D3=900;
+  const step=t=>{ const e=t-t0;
+    const p1=Math.min(1,e/D1);
+    const p2=Math.min(1,Math.max(0,(e-D1)/D2));
+    const p3=Math.min(1,Math.max(0,(e-D1-D2)/D3));
+    drawE(p1,p2,p3);
+    Eraf=(p3<1)?requestAnimationFrame(step):null; };
+  Eraf=requestAnimationFrame(step);
+}
+["Ea","Eb","Ek"].forEach(id=>$(id).addEventListener("input",()=>{
+  if(Eraf){cancelAnimationFrame(Eraf);Eraf=null;} drawE(1,1,1); }));
+$("Erun").onclick=ErunAnim;
+drawE(1,1,1);
 </script></body></html>
