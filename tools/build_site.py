@@ -176,6 +176,7 @@ algorithm predicts.</p>
 <div class='legend' id='Rtop3'></div>
 </div>
 <script>
+(function(){ // scoped: the inlined ideal-algorithm script owns the top-level names
 function dec32(s){const b=atob(s),u=new Uint8Array(b.length);
   for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return new Float32Array(u.buffer);}
 function dec16(s){const b=atob(s),u=new Uint8Array(b.length);
@@ -267,6 +268,7 @@ function drawReal(){
 document.getElementById('Ra').addEventListener('input',drawReal);
 document.getElementById('Rb').addEventListener('input',drawReal);
 drawReal();
+})();
 </script>"""
     return html
 
