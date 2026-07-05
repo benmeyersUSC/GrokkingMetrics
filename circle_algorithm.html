@@ -1,0 +1,306 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>The Circle Algorithm — interactive companion</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     margin:0;background:#eef0f4;color:#1c1e21}
+.wrap{max-width:1200px;margin:0 auto;padding:24px 18px 80px}
+header{background:#141a26;color:#fff;padding:30px 22px}
+header h1{margin:0;font-size:24px}
+header p{margin:8px 0 0;color:#9fb0c9;font-size:14px;max-width:860px}
+.card{background:#fff;border-radius:14px;box-shadow:0 1px 5px rgba(20,26,38,.09);
+      padding:22px 24px;margin:24px 0}
+h2{font-size:19px;margin:0 0 4px}
+.sub{color:#5a6472;font-size:13.5px;margin:0 0 14px;max-width:980px;line-height:1.5}
+.row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+canvas{background:#f7f8fa;border-radius:10px}
+.ctl{font-size:13px;color:#333;margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ctl input[type=range]{width:180px}
+.val{font-family:ui-monospace,Menlo,monospace;background:#eef2fa;border-radius:5px;
+     padding:1px 7px;font-size:12.5px;color:#2b4a9b}
+button{font-size:13px;padding:5px 12px;border-radius:7px;border:1px solid #c6ccd8;
+       background:#fff;cursor:pointer}
+button:hover{background:#f0f3f9}
+.legend{font-size:12.5px;color:#555;margin-top:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:4px;vertical-align:middle}
+</style></head><body>
+<header><h1>The Circle Algorithm</h1>
+<p>Interactive companion to the grokked mod-113 network. Four pictures: the winding map,
+the dials that store it, the DFT that finds it, and the interference that answers with it.</p>
+</header><div class="wrap">
+
+<!-- ══════════ PANEL A ══════════ -->
+<div class="card"><h2>1 · Pegs and winding</h2>
+<p class="sub">113 fixed pegs. Frequency k is a gear ratio: token a lands on peg
+(k·a) mod 113. Because 113 is prime, every k is a bijection — no peg is ever shared.
+Connecting consecutive tokens draws the star polygon {113/k}.</p>
+<div class="row"><div>
+<canvas id="cvA" width="430" height="430"></canvas>
+</div><div style="min-width:300px">
+<div class="ctl">k (winding) <input type="range" id="Ak" min="1" max="56" value="1">
+  <span class="val" id="AkV">1</span></div>
+<div class="ctl">a (token) <input type="range" id="Aa" min="0" max="112" value="9">
+  <span class="val" id="AaV">9</span></div>
+<div class="ctl"><label><input type="checkbox" id="Astar" checked> star path a→a+1</label>
+  <label><input type="checkbox" id="Atrail"> trail 0…a</label>
+  <button id="Aplay">▶ sweep a</button></div>
+<div class="legend" id="Ainfo"></div>
+<div class="legend">
+<span class="dot" style="background:#d62728"></span>token a &nbsp;
+<span class="dot" style="background:#c9d2e3"></span>pegs &nbsp;
+<span class="dot" style="background:#9fb6e8"></span>star path</div>
+</div></div></div>
+
+<!-- ══════════ PANEL B ══════════ -->
+<div class="card"><h2>2 · Dials and shadows (why rows are sinusoids)</h2>
+<p class="sub">The point walks the k-wound pegs. Each embedding dimension is a fixed
+axis (a “dial”) through the plane, with its own orientation φ and gain α. Its stored
+value is the point's <b>shadow</b> on that axis — and the shadow of circular motion is a
+sinusoid. Phase = the dial's orientation. Two independent dials recover the whole plane.</p>
+<div class="row"><div>
+<canvas id="cvB" width="380" height="380"></canvas>
+</div><div>
+<canvas id="cvBw" width="560" height="380"></canvas>
+</div></div>
+<div class="ctl">k <input type="range" id="Bk" min="1" max="12" value="3"><span class="val" id="BkV">3</span>
+ &nbsp; a <input type="range" id="Ba" min="0" max="112" value="20"><span class="val" id="BaV">20</span>
+ &nbsp; custom dial φ <input type="range" id="Bphi" min="0" max="628" value="140"><span class="val" id="BphiV">1.40</span>
+ &nbsp; gain α <input type="range" id="Balpha" min="10" max="100" value="70"><span class="val" id="BalphaV">0.70</span>
+ <button id="Bplay">▶ sweep a</button></div>
+<div class="legend">
+<span class="dot" style="background:#1f77b4"></span>dial u (φ=0 → cos) &nbsp;
+<span class="dot" style="background:#2ca02c"></span>dial v (φ=90° → sin) &nbsp;
+<span class="dot" style="background:#9467bd"></span>your dial (φ, α) — an arbitrary embedding dimension</div>
+</div>
+
+<!-- ══════════ PANEL C ══════════ -->
+<div class="card"><h2>3 · The DFT: freeze and stack, or spin and cancel</h2>
+<p class="sub">Signal: a real cosine at frequency k<sub>sig</sub> with phase φ — i.e. a
+mirror-pair of unit rotators (+k and −k). The probe counter-rotates everything at
+k<sub>probe</sub>. Arrows are added tip-to-tail over all 113 tokens. If the probe matches,
+the +k rotator <b>freezes</b>: 113 parallel arrows stack into a straight wall of length
+113/2, pointing at the phase angle. Everything else keeps <b>spinning</b> and its path
+closes into a rosette that returns to zero.</p>
+<div class="row"><div>
+<canvas id="cvC" width="430" height="430"></canvas>
+<div class="legend"><span class="dot" style="background:#2ca02c"></span>+k<sub>sig</sub> arrow path
+ &nbsp;<span class="dot" style="background:#aab3c0"></span>−k<sub>sig</sub> (mirror) path
+ &nbsp;<span class="dot" style="background:#d62728"></span>total X endpoint</div>
+</div><div style="min-width:320px">
+<div class="ctl">k<sub>sig</sub> <input type="range" id="Cks" min="1" max="56" value="7">
+  <span class="val" id="CksV">7</span></div>
+<div class="ctl">phase φ <input type="range" id="Cphi" min="0" max="628" value="40">
+  <span class="val" id="CphiV">0.40</span></div>
+<div class="ctl">k<sub>probe</sub> <input type="range" id="Ckp" min="1" max="56" value="7">
+  <span class="val" id="CkpV">7</span></div>
+<div class="ctl"><button id="Canim">▶ add arrows one by one</button></div>
+<div class="legend" id="Cinfo" style="font-size:13px"></div>
+<div style="margin-top:14px"><b style="font-size:13px">spectrum |X[k]| — click a bar to set the probe</b><br>
+<canvas id="cvCs" width="440" height="120" style="cursor:pointer"></canvas></div>
+</div></div></div>
+
+<!-- ══════════ PANEL D ══════════ -->
+<div class="card"><h2>4 · Scoring by interference (why several frequencies)</h2>
+<p class="sub">logit(c) = Σ<sub>k∈S</sub> cos(2πk(a+b−c)/113). At the correct c every
+frequency votes +1 simultaneously; elsewhere the cosines scatter and cancel. Each added
+frequency sharpens the peak and widens the margin — one k is a correct algorithm, five is
+a confident one.</p>
+<div class="ctl">a <input type="range" id="Da" min="0" max="112" value="9"><span class="val" id="DaV">9</span>
+ &nbsp; b <input type="range" id="Db" min="0" max="112" value="38"><span class="val" id="DbV">38</span>
+ &nbsp; frequencies: <span id="Dks"></span></div>
+<canvas id="cvD" width="1050" height="300"></canvas>
+<div class="legend" id="Dinfo"></div>
+</div>
+
+</div><script>
+"use strict";
+const P=113, TAU=Math.PI*2;
+const $=id=>document.getElementById(id);
+function pegXY(i,cx,cy,R){const t=Math.PI/2 - TAU*i/P; return [cx+R*Math.cos(t), cy-R*Math.sin(t)];}
+
+/* ───────── Panel A ───────── */
+const cvA=$("cvA"), ctxA=cvA.getContext("2d");
+function drawA(){
+  const k=+$("Ak").value, a=+$("Aa").value;
+  $("AkV").textContent=k; $("AaV").textContent=a;
+  const cx=215,cy=215,R=185;
+  ctxA.clearRect(0,0,430,430);
+  ctxA.strokeStyle="#dde3ee"; ctxA.beginPath(); ctxA.arc(cx,cy,R,0,TAU); ctxA.stroke();
+  if($("Astar").checked){
+    ctxA.strokeStyle="rgba(120,150,220,0.45)"; ctxA.lineWidth=1; ctxA.beginPath();
+    let [x0,y0]=pegXY(0,cx,cy,R); ctxA.moveTo(x0,y0);
+    for(let i=1;i<=P;i++){const [x,y]=pegXY((k*i)%P,cx,cy,R); ctxA.lineTo(x,y);}
+    ctxA.stroke();
+  }
+  if($("Atrail").checked){
+    ctxA.fillStyle="rgba(214,39,40,0.30)";
+    for(let i=0;i<a;i++){const [x,y]=pegXY((k*i)%P,cx,cy,R); ctxA.beginPath();ctxA.arc(x,y,3.5,0,TAU);ctxA.fill();}
+  }
+  ctxA.fillStyle="#c9d2e3";
+  for(let i=0;i<P;i++){const [x,y]=pegXY(i,cx,cy,R); ctxA.beginPath();ctxA.arc(x,y,2.2,0,TAU);ctxA.fill();}
+  const peg=(k*a)%P, [px,py]=pegXY(peg,cx,cy,R);
+  ctxA.strokeStyle="#d62728"; ctxA.lineWidth=1.4;
+  ctxA.beginPath(); ctxA.moveTo(cx,cy); ctxA.lineTo(px,py); ctxA.stroke();
+  ctxA.fillStyle="#d62728"; ctxA.beginPath(); ctxA.arc(px,py,7,0,TAU); ctxA.fill();
+  ctxA.fillStyle="#111"; ctxA.font="12px sans-serif";
+  ctxA.fillText("a="+a, px+10, py-8);
+  $("Ainfo").innerHTML=`token a=${a} → peg <b>(${k}·${a}) mod 113 = ${peg}</b>
+   &nbsp;·&nbsp; angle = 2π·${k}·${a}/113 = ${(TAU*k*a/P%TAU).toFixed(3)} rad
+   &nbsp;·&nbsp; star polygon {113/${k}}`;
+}
+["Ak","Aa","Astar","Atrail"].forEach(id=>$(id).addEventListener("input",drawA));
+let AT=null;
+$("Aplay").onclick=()=>{ if(AT){clearInterval(AT);AT=null;$("Aplay").textContent="▶ sweep a";return;}
+  $("Aplay").textContent="⏸"; AT=setInterval(()=>{ $("Aa").value=(+$("Aa").value+1)%P; drawA(); },90); };
+drawA();
+
+/* ───────── Panel B ───────── */
+const cvB=$("cvB"),ctxB=cvB.getContext("2d"),cvBw=$("cvBw"),ctxBw=cvBw.getContext("2d");
+function dials(){ return [
+  {phi:0,          alpha:1,                    col:"#1f77b4", name:"u"},
+  {phi:Math.PI/2,  alpha:1,                    col:"#2ca02c", name:"v"},
+  {phi:+$("Bphi").value/100, alpha:+$("Balpha").value/100, col:"#9467bd", name:"yours"}];}
+function drawB(){
+  const k=+$("Bk").value, a=+$("Ba").value;
+  $("BkV").textContent=k; $("BaV").textContent=a;
+  $("BphiV").textContent=(+$("Bphi").value/100).toFixed(2);
+  $("BalphaV").textContent=(+$("Balpha").value/100).toFixed(2);
+  const cx=190,cy=190,R=150, th=TAU*k*a/P;
+  const pxp=cx+R*Math.cos(th), pyp=cy-R*Math.sin(th);
+  ctxB.clearRect(0,0,380,380);
+  ctxB.strokeStyle="#dde3ee"; ctxB.beginPath(); ctxB.arc(cx,cy,R,0,TAU); ctxB.stroke();
+  ctxB.fillStyle="#c9d2e3";
+  for(let i=0;i<P;i++){const t=TAU*i/P;
+    ctxB.beginPath();ctxB.arc(cx+R*Math.cos(t),cy-R*Math.sin(t),1.6,0,TAU);ctxB.fill();}
+  for(const d of dials()){
+    const ux=Math.cos(d.phi), uy=Math.sin(d.phi), L=R+18;
+    ctxB.strokeStyle=d.col; ctxB.lineWidth=1.6;
+    ctxB.beginPath(); ctxB.moveTo(cx-L*ux,cy+L*uy); ctxB.lineTo(cx+L*ux,cy-L*uy); ctxB.stroke();
+    const s=(Math.cos(th)*ux+Math.sin(th)*uy);           // shadow coordinate (unit circle)
+    const fx=cx+R*s*ux, fy=cy-R*s*uy;
+    ctxB.setLineDash([4,4]); ctxB.strokeStyle="rgba(0,0,0,0.25)";
+    ctxB.beginPath(); ctxB.moveTo(pxp,pyp); ctxB.lineTo(fx,fy); ctxB.stroke(); ctxB.setLineDash([]);
+    ctxB.fillStyle=d.col; ctxB.beginPath(); ctxB.arc(fx,fy,5,0,TAU); ctxB.fill();
+  }
+  ctxB.fillStyle="#d62728"; ctxB.beginPath(); ctxB.arc(pxp,pyp,7,0,TAU); ctxB.fill();
+  // waves
+  ctxBw.clearRect(0,0,560,380);
+  const W=530,H0=60,DH=110,sc=42;
+  ctxBw.font="11px sans-serif";
+  dials().forEach((d,j)=>{
+    const y0=H0+j*DH;
+    ctxBw.strokeStyle="#e3e7f0"; ctxBw.beginPath(); ctxBw.moveTo(15,y0); ctxBw.lineTo(15+W,y0); ctxBw.stroke();
+    ctxBw.strokeStyle=d.col; ctxBw.lineWidth=1.7; ctxBw.beginPath();
+    for(let i=0;i<P;i++){
+      const v=d.alpha*Math.cos(TAU*k*i/P - d.phi);
+      const x=15+W*i/(P-1), y=y0-sc*v;
+      i?ctxBw.lineTo(x,y):ctxBw.moveTo(x,y);
+    } ctxBw.stroke();
+    const va=d.alpha*Math.cos(TAU*k*a/P - d.phi);
+    ctxBw.fillStyle=d.col; ctxBw.beginPath();
+    ctxBw.arc(15+W*a/(P-1), y0-sc*va, 5,0,TAU); ctxBw.fill();
+    ctxBw.fillStyle="#333";
+    ctxBw.fillText(`row for dial ${d.name}:  α·cos(2π·${k}·a/113 − φ)   value @a=${a}: ${va.toFixed(3)}`, 15, y0-sc-8);
+  });
+}
+["Bk","Ba","Bphi","Balpha"].forEach(id=>$(id).addEventListener("input",drawB));
+let BT=null;
+$("Bplay").onclick=()=>{ if(BT){clearInterval(BT);BT=null;$("Bplay").textContent="▶ sweep a";return;}
+  $("Bplay").textContent="⏸"; BT=setInterval(()=>{ $("Ba").value=(+$("Ba").value+1)%P; drawB(); },90); };
+drawB();
+
+/* ───────── Panel C ───────── */
+const cvC=$("cvC"),ctxC=cvC.getContext("2d"),cvCs=$("cvCs"),ctxCs=cvCs.getContext("2d");
+let Cn=P;  // arrows added so far (for animation)
+function pathsC(){
+  const ks=+$("Cks").value, kp=+$("Ckp").value, phi=+$("Cphi").value/100;
+  // signal cos(2π ks a/P + φ) = ½e^{i(…+φ)} + ½e^{−i(…+φ)}; probe multiplies by e^{−2πi kp a/P}
+  const A=[[0,0]], B=[[0,0]];
+  let ax=0,ay=0,bx=0,by=0;
+  for(let a=0;a<P;a++){
+    const t1= TAU*(ks-kp)*a/P + phi;   ax+=0.5*Math.cos(t1); ay+=0.5*Math.sin(t1); A.push([ax,ay]);
+    const t2=-TAU*(ks+kp)*a/P - phi;   bx+=0.5*Math.cos(t2); by+=0.5*Math.sin(t2); B.push([bx,by]);
+  }
+  return {A,B};
+}
+function drawC(){
+  const ks=+$("Cks").value, kp=+$("Ckp").value, phi=+$("Cphi").value/100;
+  $("CksV").textContent=ks; $("CkpV").textContent=kp; $("CphiV").textContent=phi.toFixed(2);
+  const {A,B}=pathsC();
+  const cx=215,cy=280, sc=5.6;
+  ctxC.clearRect(0,0,430,430);
+  ctxC.strokeStyle="#e3e7f0";
+  ctxC.beginPath();ctxC.moveTo(10,cy);ctxC.lineTo(420,cy);ctxC.stroke();
+  ctxC.beginPath();ctxC.moveTo(cx,10);ctxC.lineTo(cx,420);ctxC.stroke();
+  const seg=(p,col,w)=>{ctxC.strokeStyle=col;ctxC.lineWidth=w;ctxC.beginPath();
+    ctxC.moveTo(cx+sc*p[0][0],cy-sc*p[0][1]);
+    for(let i=1;i<=Cn;i++)ctxC.lineTo(cx+sc*p[i][0],cy-sc*p[i][1]);ctxC.stroke();};
+  seg(B,"#aab3c0",1.3); seg(A,"#2ca02c",2);
+  const X=[A[Cn][0]+B[Cn][0], A[Cn][1]+B[Cn][1]];
+  ctxC.fillStyle="#d62728"; ctxC.beginPath();
+  ctxC.arc(cx+sc*X[0],cy-sc*X[1],6,0,TAU); ctxC.fill();
+  const mag=Math.hypot(X[0],X[1]);
+  $("Cinfo").innerHTML = (ks===kp)
+    ? `<b>matched:</b> the +k path is a straight wall — 113 parallel half-arrows → length
+       ${ (P/2).toFixed(1) }, pointing at φ=${phi.toFixed(2)}. |X|=${mag.toFixed(1)}.`
+    : `<b>mismatched (rate ${ks-kp>0?"+":""}${ks-kp}):</b> both paths keep turning and close
+       into rosettes → |X|=${mag.toFixed(2)} ≈ 0.`;
+  // spectrum
+  ctxCs.clearRect(0,0,440,120);
+  let mx=0; const mags=[];
+  for(let k=1;k<=56;k++){
+    let re=0,im=0;
+    for(let a=0;a<P;a++){const v=Math.cos(TAU*ks*a/P+phi);
+      re+=v*Math.cos(TAU*k*a/P); im-=v*Math.sin(TAU*k*a/P);}
+    const m=Math.hypot(re,im); mags.push(m); mx=Math.max(mx,m);
+  }
+  mags.forEach((m,i)=>{
+    const k=i+1, x=8+(k-1)*7.6, h=100*m/(mx||1);
+    ctxCs.fillStyle = (k===kp)?"#d62728":(k===ks?"#2ca02c":"#c1c9d8");
+    ctxCs.fillRect(x,110-h,5.4,h);
+  });
+  ctxCs.fillStyle="#555"; ctxCs.font="10px sans-serif";
+  ctxCs.fillText("k=1", 6, 118); ctxCs.fillText("k=56", 408, 118);
+}
+["Cks","Ckp","Cphi"].forEach(id=>$(id).addEventListener("input",()=>{Cn=P;drawC();}));
+cvCs.addEventListener("click",e=>{
+  const k=Math.max(1,Math.min(56,Math.round((e.offsetX-8)/7.6)+1));
+  $("Ckp").value=k; Cn=P; drawC();});
+let CT=null;
+$("Canim").onclick=()=>{ if(CT){clearInterval(CT);CT=null;return;}
+  Cn=0; CT=setInterval(()=>{ Cn++; drawC(); if(Cn>=P){clearInterval(CT);CT=null;} },28); };
+drawC();
+
+/* ───────── Panel D ───────── */
+const DKS=[1,4,9,17,25,33,42,51];
+const Dbox=$("Dks");
+DKS.forEach((k,i)=>{ const l=document.createElement("label");
+  l.style.marginRight="10px"; l.style.fontSize="13px";
+  l.innerHTML=`<input type="checkbox" data-k="${k}" ${i<1?"checked":""}> k=${k}`;
+  Dbox.appendChild(l); });
+const cvD=$("cvD"),ctxD=cvD.getContext("2d");
+function drawD(){
+  const a=+$("Da").value, b=+$("Db").value;
+  $("DaV").textContent=a; $("DbV").textContent=b;
+  const ks=[...Dbox.querySelectorAll("input:checked")].map(e=>+e.dataset.k);
+  const cstar=(a+b)%P;
+  const logits=[];
+  for(let c=0;c<P;c++){ let s=0;
+    for(const k of ks) s+=Math.cos(TAU*k*(a+b-c)/P); logits.push(s); }
+  const mx=Math.max(...logits,1), mn=Math.min(...logits,-1);
+  ctxD.clearRect(0,0,1050,300);
+  const X=c=>25+1000*c/(P-1), Y=v=>270-240*(v-mn)/(mx-mn||1);
+  ctxD.strokeStyle="#e3e7f0"; ctxD.beginPath(); ctxD.moveTo(25,Y(0)); ctxD.lineTo(1025,Y(0)); ctxD.stroke();
+  ctxD.strokeStyle="#1f77b4"; ctxD.lineWidth=1.7; ctxD.beginPath();
+  logits.forEach((v,c)=>{ c?ctxD.lineTo(X(c),Y(v)):ctxD.moveTo(X(c),Y(v)); }); ctxD.stroke();
+  ctxD.fillStyle="#d62728"; ctxD.beginPath(); ctxD.arc(X(cstar),Y(logits[cstar]),6,0,TAU); ctxD.fill();
+  ctxD.fillStyle="#111"; ctxD.font="12px sans-serif";
+  ctxD.fillText(`c* = (${a}+${b}) mod 113 = ${cstar}`, X(cstar)+10, Y(logits[cstar])-8);
+  const wrong=Math.max(...logits.filter((_,c)=>c!==cstar));
+  $("Dinfo").innerHTML=`correct logit = <b>${logits[cstar].toFixed(2)}</b> (=${ks.length} freqs × 1)
+   &nbsp;·&nbsp; best wrong = <b>${wrong.toFixed(2)}</b>
+   &nbsp;·&nbsp; margin = <b>${(logits[cstar]-wrong).toFixed(2)}</b> — add frequencies and watch it grow.`;
+}
+["Da","Db"].forEach(id=>$(id).addEventListener("input",drawD));
+Dbox.addEventListener("change",drawD);
+drawD();
+</script></body></html>

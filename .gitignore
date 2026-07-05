@@ -67,3 +67,14 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# GrokkingMetrics: deps + run artifacts + binaries
+deps/
+checkpoints_*/
+ens_runs/
+runs/
+nanda_grokking
+nanda_leverage
+*.bin
+crystal_cache.npz
+__pycache__/

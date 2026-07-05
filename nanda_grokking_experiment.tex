@@ -1,0 +1,271 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\geometry{margin=1.2in}
+
+\lstdefinestyle{cpp}{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{gray},
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  framerule=0.2pt,
+  xleftmargin=1em,
+  xrightmargin=1em
+}
+
+\title{Movement Metrics Under Grokking\\[0.4em]
+\large Instrumenting a Nanda-Style Modular Arithmetic Run\\
+with Parameter-Space and Output-Space Trajectory Metrics}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Replicate the canonical grokking setup of Nanda et al.\ (2023) --- modular addition,
+one-layer transformer, heavy weight decay, small train fraction --- while continuously
+measuring two trajectory metrics: the \emph{parameter-space efficiency ratio} and the
+\emph{output-space accord ratio}. The question: do these movement metrics cooccur with,
+or precede, the canonical grokking signature (train accuracy saturating early, validation
+accuracy jumping late)? A rising accord ratio ahead of the validation breakthrough would
+make it a live, loss-independent predictor of circuit formation.
+
+\section{Task and Model}
+
+\paragraph{Task.} $(a + b) \bmod p$ with $p = 113$. The full dataset is all $p^2 = 12{,}769$
+ordered pairs. A fixed seeded split takes $3{,}840$ examples ($\approx 30\%$) for training;
+the remaining $8{,}929$ are held out for validation. Inputs are the three-token sequence
+$[a,\, b,\, =]$, one-hot over a vocabulary of size $p + 1$; the target is the one-hot answer
+read at the $=$ position.
+
+\paragraph{Model.} One pre-norm transformer block:
+token embedding ($\mathbb{R}^{114} \to \mathbb{R}^{128}$ per position), learned positional
+embedding, multi-head self-attention (4 heads, head dim 32), MLP ($128 \to 512 \to 128$, ReLU),
+position readout at $=$, linear unembedding to $p$ logits. Softmax cross-entropy loss.
+
+\paragraph{Optimizer.} AdamW: $\beta_1 = 0.9$, $\beta_2 = 0.98$, learning rate $10^{-3}$,
+decoupled weight decay $\lambda_{\mathrm{wd}} = 1.0$. Weight decay is essential: grokking
+largely disappears without it. Minibatches of 128; $5 \times 10^4$ steps.
+
+\section{Expression in TTTN}
+
+The experiment is implemented in TTTN, a header-only C++20 library in which tensor
+\emph{shapes are types}: a rank-$r$ tensor of dimensions $d_1 \times \cdots \times d_r$
+is the type \texttt{Tensor<$d_1$,\dots,$d_r$>}, and every contraction, layer, and network
+carries its full shape signature at compile time. Three consequences matter here.
+
+\paragraph{Networks are types.} A layer is any type satisfying the \texttt{Block} concept:
+it declares \texttt{InputTensor} and \texttt{OutputTensor}, provides shape-typed
+\texttt{Forward}/\texttt{Backward}, and exposes its parameters through \texttt{all\_params()}.
+A network is a \texttt{TrainableTensorNetwork<Blocks...>} --- a compile-time-checked chain in
+which each block's \texttt{OutputTensor} must equal the next block's \texttt{InputTensor}
+(enforced by \texttt{static\_assert}; an ill-shaped architecture does not compile).
+The model of Section~1 is, verbatim from the runner:
+
+\begin{lstlisting}[style=cpp]
+using EmbedBlock   = MapDenseMDBlock<Tensor<3,114>, Tensor<128>, 1>;
+using PosEmbBlock  = PositionalEmbeddingBlock<3, 128>;
+using TxfBlock     = TransformerBlock<Tensor<3,128>, 4, 512>;
+using SelectBlock  = SelectPositionBlock<3, 128, 2>;
+using UnembedBlock = DenseMDBlock<Tensor<128>, Tensor<113>>;
+
+using NandaNet = TrainableTensorNetwork<
+    EmbedBlock, PosEmbBlock, TxfBlock, SelectBlock, UnembedBlock>;
+\end{lstlisting}
+
+The gradient-descent program one is really writing must type-check in the language of
+linear algebra; here it type-checks in C++ as well, and the two checks are the same check.
+
+\paragraph{The parameter walk is free.} Because every block exposes \texttt{all\_params()}
+as a tuple of \texttt{Param} objects and tuples concatenate structurally, the entire network
+flattens to one canonical parameter order at compile time
+(\texttt{NandaNet::TotalParamCount} is a \texttt{constexpr}). Every metric in this document
+--- the per-parameter accumulators $G_i, D_i$, the flat $\Delta\theta$ snapshot, the Jacobian
+column extraction, the output-space accumulators indexed by $i$ --- is a single fold over
+this tuple. No name matching, no reflection, no bookkeeping: the type system \emph{is} the
+bookkeeping.
+
+\paragraph{Instrumentation lives where the physics happens.} Each \texttt{Param} owns its
+value, gradient, Adam moments, and trajectory accumulators side by side; $G_i$ and $D_i$ are
+updated inside the optimizer step itself, so parameter-space movement is captured at the exact
+moment it occurs, at every step, for free. The Jacobian computation reuses the ordinary
+backward infrastructure --- a unit vector $e_j$ passed as the upstream gradient --- so the
+output-space metrics require no second autodiff system: the same typed backward pass that
+trains the network also measures it.
+
+\section{The Base Accumulation: Parameter-Space Movement}
+
+Let $\theta_i(t)$ be parameter element $i$ after step $t$, and
+$\Delta\theta_i(t) = \theta_i(t) - \theta_i(t-1)$ the realized update (Adam step
+plus weight-decay shrink). Two running accumulators per parameter:
+\begin{align}
+    G_i &= \sum_t \bigl|\Delta\theta_i(t)\bigr|
+        &&\text{(gross path --- the odometer)} \\[2pt]
+    D_i &= \sum_t \Delta\theta_i(t) \;=\; \theta_i(T) - \theta_i(0)
+        &&\text{(net displacement)}
+\end{align}
+
+\paragraph{Efficiency ratio.}
+\begin{equation}
+    \eta_{\mathrm{param}} \;=\; \frac{\|D\|_2}{\sum_i G_i} \;\in\; [0, 1]
+\end{equation}
+$\eta_{\mathrm{param}} = 1$ iff every step of every parameter moves monotonically toward its
+final position (geodesic motion); $\eta_{\mathrm{param}} \to 0$ under pure churn. This metric
+treats all parameters as equally important and all directions in parameter space as
+equivalent --- it is blind to what the movement \emph{does}. The output-space metrics below
+correct for this.
+
+\section{Output-Space Movement: The Jacobian as the Metric}
+
+\paragraph{The Jacobian.} For the network function $F : \mathbb{R}^n \to \mathbb{R}^p$
+(logit vector, $p = 113$) evaluated at a fixed reference input $x$,
+\begin{equation}
+    J(t) \;=\; \frac{\partial F(x)}{\partial \theta}\bigg|_{\theta(t)} \;\in\; \mathbb{R}^{p \times P},
+    \qquad
+    J_i(t) \;=\; \frac{\partial F(x)}{\partial \theta_i}\bigg|_{\theta(t)} \;\in\; \mathbb{R}^{p}
+\end{equation}
+Column $J_i$ is parameter $i$'s \emph{complete first-order influence} on the output:
+perturbing $\theta_i$ by $\varepsilon$ moves the output by $\varepsilon\, J_i + O(\varepsilon^2)$.
+Every parameter's influence is expressed in the same coordinates --- the model's output shape.
+$J$ is computed by $p$ reverse-mode passes (unit vector $e_j$ as upstream gradient collects row
+$j$ for all parameters at once), averaged over a small fixed batch of reference inputs, and is
+recomputed at every training step.
+
+\paragraph{Output-space GROSS and NET.} Each step contributes its realized movement,
+\emph{metricized by the Jacobian at that moment}, to two running output-shape accumulators:
+\begin{align}
+    \mathrm{NET}_j &= \sum_t \sum_i \Delta\theta_i(t)\, J_{ij}(t)
+        \;=\; \sum_t \bigl(J(t)\,\Delta\theta(t)\bigr)_j \\[2pt]
+    \mathrm{GROSS}_j &= \sum_t \sum_i \bigl|\Delta\theta_i(t)\, J_{ij}(t)\bigr|
+\end{align}
+$\mathrm{NET} \in \mathbb{R}^p$ is the accumulated first-order output displacement --- the signed
+sum of what every update did to the function. $\mathrm{GROSS} \in \mathbb{R}^p$ is the same sum
+with all cancellation unfolded: the total output-space work performed, counting fights between
+parameters (and reversals across time) at full price.
+
+Per-parameter versions of both accumulators
+($\mathrm{net}_i,\, \mathrm{gross}_i \in \mathbb{R}^p$ for each $i$) are also maintained and
+serialized at checkpoints, supporting post-hoc leverage-weighted analysis.
+
+\paragraph{Accord ratio.}
+\begin{equation}
+    \eta_{\mathrm{out}} \;=\; \frac{\|\mathrm{NET}\|_2}{\|\mathrm{GROSS}\|_2} \;\in\; [0, 1]
+\end{equation}
+$\eta_{\mathrm{out}} = 1$ iff every per-step, per-parameter contribution
+$\Delta\theta_i(t)\,J_i(t)$ pointed in a consistent direction per output coordinate ---
+perfectly collaborative movement. Departure from 1 measures destructive interference:
+parameters (or time steps) doing output-space work that cancels.
+
+\paragraph{Per-dimension accord.} The ratio disaggregates over output coordinates:
+\begin{equation}
+    \eta_j \;=\; \frac{|\mathrm{NET}_j|}{\mathrm{GROSS}_j}
+\end{equation}
+revealing \emph{which logits} receive collaborative updates and which receive churn.
+Under the known Fourier mechanism of modular addition, a natural refinement is to ask whether
+accord rises first in the output directions associated with the network's key frequencies.
+
+\section{Relation to the Fisher Information Matrix}
+
+The empirical Fisher at $x$ is $\mathcal{F} = J^\top J \in \mathbb{R}^{P \times P}$, with
+\begin{equation}
+    \mathcal{F}_{ii} = \|J_i\|_2^2, \qquad
+    \mathcal{F}_{ik} = \langle J_i, J_k \rangle .
+\end{equation}
+The diagonal treats parameters as if they influenced the output orthogonally; the off-diagonal
+encodes how parameters share output directions --- the collaboration structure. The identity
+\begin{equation}
+    \|J\,\Delta\theta\|_2^2
+    \;=\; \Delta\theta^\top \mathcal{F}\, \Delta\theta
+    \;=\; \underbrace{\sum_i \Delta\theta_i^2\, \mathcal{F}_{ii}}_{\text{diagonal}}
+    \;+\; \underbrace{2 \sum_{i<k} \Delta\theta_i\, \Delta\theta_k\, \mathcal{F}_{ik}}_{\text{off-diagonal (collaboration)}}
+\end{equation}
+shows that the accord ratio probes the full off-diagonal structure of $\mathcal{F}$ under the
+realized update directions --- without ever materializing the $P \times P$ matrix
+($\sim 10^{10}$ entries at $P \sim 10^5$). Only $J$ itself ($p \times P$) is formed, used once
+per step, and discarded.
+
+\section{Measurement Protocol}
+
+Per training step:
+\begin{enumerate}
+    \item Snapshot $\theta$ (flat, all parameters).
+    \item One AdamW training step on a minibatch; recover $\Delta\theta(t)$ by subtraction.
+          (Parameter-space accumulators $G_i, D_i$ update inside the optimizer step itself.)
+    \item Compute $J(t)$ at the current weights on the fixed reference batch
+          ($p \times |\mathcal{B}_{\mathrm{ref}}|$ backward passes).
+    \item Accumulate $\Delta\theta_i(t)\,J_i(t)$ into the per-parameter and network-level
+          output-space GROSS/NET tensors.
+\end{enumerate}
+Every 25 steps: evaluate loss and accuracy on the full train and validation splits; log all
+scalar metrics to CSV. Every 500 steps: serialize weights, optimizer state, trajectory
+accumulators, and the full per-parameter output-space tensors (resumable, crash-safe).
+
+\section{What to Look For}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{lp{8.5cm}}
+\toprule
+\textbf{Observation} & \textbf{Interpretation} \\
+\midrule
+$\eta_{\mathrm{out}}$ rises \emph{before} val-acc jump &
+    Accord is a leading indicator of circuit formation; collaborative output-space movement
+    precedes behavioral generalization. \\
+$\eta_{\mathrm{out}}$ rises \emph{with} val-acc jump &
+    Accord cooccurs with grokking; still a useful loss-independent correlate. \\
+$\eta_{\mathrm{out}}$ flat through grokking &
+    Clean negative result: accord at the network level does not resolve the transition;
+    per-dimension or per-parameter disaggregation required. \\
+$\eta_{\mathrm{param}}$ vs.\ $\eta_{\mathrm{out}}$ divergence &
+    Movement directed in parameter space but conflicted in function space (or vice versa) ---
+    the two geometries decouple, and when they do is itself informative. \\
+$\eta_j$ rises first at key-frequency logits &
+    Accord localizes to the known Fourier circuit --- strongest possible link between the
+    movement metrics and the mechanistic account. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Results}
+
+% ── dashboard figure ──
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=\textwidth]{checkpoints_nanda_grokking/dashboard.png}
+%     \caption{Grokking signature (top), parameter-space efficiency and output-space accord
+%     (middle), cumulative output-space movement (bottom). Dashed line: first step with
+%     validation accuracy $\geq 90\%$.}
+% \end{figure}
+
+% TODO: results prose.
+
+\section*{Implementation}
+
+TTTN (header-only C++20). Metrics: \texttt{src/NetworkUtil.hpp} (per-parameter $G_i, D_i$
+accumulated inside \texttt{Param::update}), \texttt{src/FunctionalInfluence.hpp}
+(\texttt{ComputeJacobian}, \texttt{OutputSpaceTrajectory}). Runner:
+\texttt{nanda\_grokking.cpp}. Dashboard: \texttt{tools/nanda\_grokking\_dashboard.py}.
+Framework: \texttt{PARAMETER\_MOVEMENT.md}.
+
+\begin{thebibliography}{9}
+\bibitem{nanda2023}
+Nanda, N., Chan, L., Lieberum, T., Smith, J., Steinhardt, J.
+\emph{Progress measures for grokking via mechanistic interpretability.} ICLR 2023.
+
+\bibitem{power2022}
+Power, A., Burda, Y., Edwards, H., Babuschkin, I., Misra, V.
+\emph{Grokking: Generalization beyond overfitting on small algorithmic datasets.} 2022.
+\end{thebibliography}
+
+\end{document}
