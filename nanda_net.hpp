@@ -46,7 +46,12 @@ public:
 
     PositionalEmbeddingBlock() {
         // Small-magnitude init for positional embeddings.
-        static std::mt19937 rng{std::random_device{}()};
+        // Honors TTTN_INIT_SEED (same convention as XavierInitMD) for reproducible inits.
+        static std::mt19937 rng{[]() -> std::mt19937::result_type {
+            if (const char *s = std::getenv("TTTN_INIT_SEED"))
+                return static_cast<std::mt19937::result_type>(std::strtoul(s, nullptr, 10) ^ 0x9E3779B9u);
+            return std::random_device{}();
+        }()};
         std::uniform_real_distribution<float> dist{-0.02f, 0.02f};
         for (size_t i = 0; i < Tensor<SL, ED>::Size; ++i) pos_.value.flat(i) = dist(rng);
     }

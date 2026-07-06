@@ -72,6 +72,7 @@ Testing/
 deps/
 checkpoints_*/
 ens_runs/
+wd_runs/
 runs/
 nanda_grokking
 nanda_leverage

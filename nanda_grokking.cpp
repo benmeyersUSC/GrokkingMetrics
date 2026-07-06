@@ -253,13 +253,16 @@ bool LoadTrajectory(OutputSpaceTrajectory<NandaNet> &traj, const std::string &pa
 // ─── main ────────────────────────────────────────────────────────────────────
 
 // argv: [1] ckpt_dir  [2] data-split seed  [3] jacobian-every  [4] per-param accumulators (0/1)
+//       [5] weight decay (default WD = 1.0)
 int main(int argc, char **argv) {
     const std::string ckpt_dir = argc > 1 ? argv[1] : DefaultCkptDir;
     const uint32_t seed_run    = argc > 2 ? static_cast<uint32_t>(std::stoul(argv[2])) : Seed;
     const size_t jac_every     = argc > 3 ? std::stoul(argv[3]) : JacobianEvery;
     const bool per_param_accum = argc > 4 ? (std::string(argv[4]) == "1") : true;
+    const float wd_run         = argc > 5 ? std::stof(argv[5]) : WD;
     std::cout << "[cfg] dir=" << ckpt_dir << " seed=" << seed_run
-              << " jac_every=" << jac_every << " per_param=" << per_param_accum << "\n";
+              << " jac_every=" << jac_every << " per_param=" << per_param_accum
+              << " wd=" << wd_run << "\n";
     std::filesystem::create_directories(ckpt_dir);
     std::filesystem::create_directories(ckpt_dir + "/snaps");
     const std::string ckpt_path     = ckpt_dir + "/ckpt.bin";
@@ -291,7 +294,7 @@ int main(int argc, char **argv) {
     NetworkTrainer<NandaNet, Batch> tr(*net);
     tr.adam().beta1 = Beta1;
     tr.adam().beta2 = Beta2;
-    tr.adam().wd   = WD;
+    tr.adam().wd   = wd_run;
 
     // Output-space trajectory accumulators — one per reference batch.
     // Per-param storage (train ref only) is optional: disable for ensemble runs.

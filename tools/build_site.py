@@ -292,6 +292,14 @@ def main() -> int:
 
     real_html = build_real_model()
 
+    # Rent-knob section — needs the wd_runs clean grid; skip gracefully without it.
+    knob_html, knob_nav = "", ""
+    if (ROOT / "wd_runs" / "clean_grid_summary.json").exists():
+        from wd_knob import build_section as build_knob
+        knob_html = build_knob()
+        knob_nav = "<a href='#knob'>Rent knob</a>"
+        print("rent-knob section baked")
+
     gloss = "".join(f"<dt>{t}</dt><dd>{b}</dd>" for t, b in GLOSSARY)
     import plotly.offline as po
 
@@ -309,7 +317,7 @@ actually learns, taught interactively and then demonstrated live by the trained 
 Grok steps across 10 seeds: {min(groks)}–{max(groks)} (canonical run: {int(v3_grok)}).</p>
 </header>
 <nav><a href='#ideal'>The algorithm</a><a href='#real'>The real model</a>
-<a href='#ens'>Ensemble</a><a href='#v3'>Instrumented run</a><a href='#gloss'>Glossary</a></nav>
+<a href='#ens'>Ensemble</a>{knob_nav}<a href='#v3'>Instrumented run</a><a href='#gloss'>Glossary</a></nav>
 <div class='wrap'>
 
 <div class='card'><h2>What happened here</h2>
@@ -334,6 +342,8 @@ then see the training dynamics that produced it.</p></div>
 grok moment (peak validation-accuracy slope) sits at τ = 0. Alignment is per-run, which
 is why the transition stays sharp despite grok steps spanning {min(groks)}–{max(groks)}.</p>
 {ens_html}</div>
+
+{knob_html}
 
 <div class='card' id='v3'><h2>The instrumented run</h2>
 <p class='sub'>The canonical seed with the full instrument suite: crystallization and
