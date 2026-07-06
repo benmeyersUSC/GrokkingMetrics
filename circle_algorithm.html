@@ -761,7 +761,10 @@ function drawF(){
     ctxFz.fillText(dg.title,cx,14);
     if(!dg.terms.length){
       ctxFz.fillStyle="#1b7f3b";
-      ctxFz.fillText("every term is 0 — dials are dedicated ✓",cx,cy+4);
+      ctxFz.fillText("every term is 0 — dials are dedicated ✓",cx,cy-4);
+      ctxFz.fillStyle="#8a93a6";
+      ctxFz.fillText("(a term is a per-dial product of both notes:",cx,cy+14);
+      ctxFz.fillText("tick “collide the planes” to make these fight)",cx,cy+28);
     } else {
       let px=cx,py=cy;
       const cols=["#1f77b4","#9467bd","#e08a2e","#2ca02c"];
@@ -854,8 +857,18 @@ function drawF(){
   ctxFl.strokeStyle="#111"; ctxFl.lineWidth=1.6;
   ctxFl.beginPath(); ctxFl.arc(X(s),Y(lg[s]),7,0,TAU); ctxFl.stroke();
   ctxFl.fillStyle="#d62728"; ctxFl.beginPath(); ctxFl.arc(X(am),Y(lg[am]),5.5,0,TAU); ctxFl.fill();
-  ctxFl.fillStyle="#555"; ctxFl.font="11px sans-serif";
-  ctxFl.fillText("solid = your machine's logits · dashed = pure interference (junk-free)",20,14);
+  ctxFl.font="11px sans-serif";
+  if(am===s){ ctxFl.fillStyle="#1b7f3b";
+    ctxFl.fillText(`argmax = truth = ${s} ✓`, Math.min(X(s)+11,905), Math.max(34,Y(lg[s])-10));
+  } else {
+    ctxFl.fillStyle="#c22";
+    ctxFl.fillText(`argmax = ${am} (the machine's pick)`, Math.min(X(am)+10,860), Math.max(34,Y(lg[am])-10));
+    ctxFl.fillStyle="#111";
+    ctxFl.fillText(`truth c* = ${s}`, Math.min(X(s)+10,940), Math.max(52,Y(lg[s])+18));
+  }
+  ctxFl.fillStyle="#555";
+  ctxFl.fillText("solid = your machine's logits · dashed = pure interference (junk-free) · "+
+    "● filled red = machine's argmax · ○ black ring = the truth",20,14);
   let ok=0;
   for(let s2i=0;s2i<P;s2i++){ const q=col(s2i); let bm=0,bv=-1e9;
     for(let c=0;c<P;c++){ const v=dot(W[c],q); if(v>bv){bv=v;bm=c;} }
