@@ -171,17 +171,21 @@ the network actually doing it. {5, 8, 17, 49} is the circuit the trained run cho
 
 <!-- ══════════ PANEL F ══════════ -->
 <div class="card"><h2>6 · The two-dial machine (build your own — or curse it)</h2>
-<p class="sub">The minimal ideal machine: <b>two</b> embedding dimensions, one frequency,
-and phases of your choosing. Left canvas is the space of <i>stored values</i> — dim 1 on
-x, dim 2 on y. The 113 dossiers col<sub>x</sub> = (α₁cos(ψ<sub>x</sub>−φ₁),
-α₂cos(ψ<sub>x</sub>−φ₂)), ψ<sub>x</sub> = 2πk·x/113, trace an <b>ellipse</b>: the long
-axis is the direction where the dials do shared work, the short axis their disagreement,
-and only at φ₂−φ₁ = ±90° with equal gains is it a circle. Right: the decode —
-logit(c) = dossier(a+b)·dossier(c), with the pure interference term dashed behind it.
-The gap between them is the junk term, amplitude E = |α₁²e<sup>2iφ₁</sup> +
-α₂²e<sup>2iφ₂</sup>|/(α₁²+α₂²) — the ellipse axes are exactly √((α₁²+α₂²)(1±E)/2). Drag
-the phases: watch the ellipse stretch, the logits warp, and the argmax walk away from
-the truth. Winding k reorders which token owns which spot on the same ellipse.</p>
+<p class="sub">The middle rung of the ladder. Panel 5 is the <b>pure algorithm</b>
+(closed form, nothing learned); the real-model section below is the <b>trained
+network</b> (128 dimensions, redundancy, noise). This is the <b>ideal tiny model</b>:
+the same transformer machinery — lookup tables, dot products, argmax — hand-tuned to
+run the algorithm on minimum hardware: two embedding dimensions, one frequency, and
+phases <i>you</i> choose. We are manually implementing the algorithm in the
+architecture; training hopes to approximate this tuning. Every stage below is the
+machine's real data path. Hover any table cell: each entry is just α·cos(θ<sub>x</sub>
+− φ<sub>d</sub>) — one token's angle read through one dial, trig carved into weights,
+nothing dynamic. With cursed phases the dossiers trace an ellipse (junk amplitude
+E = |α₁²e<sup>2iφ₁</sup> + α₂²e<sup>2iφ₂</sup>|/(α₁²+α₂²); axes
+√((α₁²+α₂²)(1±E)/2)) and the argmax walks away from the truth. Heal to a circle and
+watch 113/113. The combine stage is <i>assumed</i> perfect for now — attention
+(fetch) and the MLP (angle addition) get folded into this machine once Acts 2–3 are
+owned.</p>
 <div class="ctl">a <input type="range" id="Fa" min="0" max="112" value="81"><span class="val" id="FaV">81</span>
  &nbsp; b <input type="range" id="Fb" min="0" max="112" value="41"><span class="val" id="FbV">41</span>
  &nbsp; k <input type="range" id="Fk" min="1" max="56" value="1"><span class="val" id="FkV">1</span></div>
@@ -189,17 +193,70 @@ the truth. Winding k reorders which token owns which spot on the same ellipse.</
  &nbsp; α₁ <input type="range" id="Fg1" min="10" max="100" value="100"><span class="val" id="Fg1V">1.00</span>
  &nbsp;&nbsp; φ₂ <input type="range" id="Fp2" min="0" max="628" value="450"><span class="val" id="Fp2V">4.50</span>
  &nbsp; α₂ <input type="range" id="Fg2" min="10" max="100" value="100"><span class="val" id="Fg2V">1.00</span>
- &nbsp; <button id="Fortho">heal: φ₂ = φ₁ + 90°</button></div>
-<div class="row"><div>
+ &nbsp; <button id="Fortho">heal all: φ-pairs to +90°</button>
+ &nbsp; <label><input type="checkbox" id="Fideal"> <b>ideal mode</b> (dependent dials
+ auto-follow — orthogonality enforced as you slide)</label></div>
+<div class="ctl"><label><input type="checkbox" id="Fs2"> <b>add second frequency</b>
+ (grows the machine to 4 dials — one plane per note)</label>
+ <span id="Fs2ctl" style="display:none">
+ &nbsp; k₂ <input type="range" id="Fk2" min="1" max="56" value="8"><span class="val" id="Fk2V">8</span>
+ &nbsp; φ₃ <input type="range" id="Fp3" min="0" max="628" value="100"><span class="val" id="Fp3V">1.00</span>
+ &nbsp; α₃ <input type="range" id="Fg3" min="10" max="100" value="100"><span class="val" id="Fg3V">1.00</span>
+ &nbsp; φ₄ <input type="range" id="Fp4" min="0" max="628" value="257"><span class="val" id="Fp4V">2.57</span>
+ &nbsp; α₄ <input type="range" id="Fg4" min="10" max="100" value="100"><span class="val" id="Fg4V">1.00</span>
+ &nbsp; <label><input type="checkbox" id="Fcol"> <b>collide the planes</b> (cram both
+ notes into dials 1–2 — every cell becomes a chord)</label></span></div>
+
+<h4>① one-hot inputs summon columns — the embedding table E (<span id="FeT">2 dials</span> × 113 tokens)</h4>
+<canvas id="cvFe" width="1040" height="204"></canvas>
+<div class="legend">blue = positive, red = negative, brightness = |value| · outlined
+columns: a (blue), b (green) · hover any cell for its formula</div>
+<div class="legend" id="Fembd" style="font-size:12.5px;line-height:1.9;background:#f4f6fb;
+border-radius:8px;padding:8px 10px;margin-top:8px"></div>
+
+<h4>①b · the health identities — the doubled-phase arrows must close</h4>
+<canvas id="cvFz" width="1040" height="150"></canvas>
+<div class="legend" style="line-height:1.7;max-width:1000px">
+Each arrow is one dial's term, tip-to-tail; the red dot is the sum, and health = the loop
+closes back to the origin. <b>Circle condition, per plane:</b> Σ<sub>d</sub>
+α<sub>d</sub>²·e<sup>2iφ<sub>d</sub></sup> = 0. With two dials that is
+α₁²∠2φ₁ + α₂²∠2φ₂ = 0 — two arrows cancel only if they have <b>equal lengths</b>
+(α₁ = α₂: unequal gains stretch the circle into an ellipse along a dial axis, your
+“different means”) <i>and</i> <b>exactly opposite directions</b> (2φ₂ = 2φ₁ + π, i.e.
+φ₂ = φ₁ ± 90°: any other gap shears it). One complex equation, two real requirements:
+equal loudness, quarter-turn apart. <b>Plane orthogonality, across notes:</b>
+Σ<sub>d</sub> z<sub>d,1</sub>·z̄<sub>d,2</sub> = 0 <i>and</i> Σ<sub>d</sub>
+z<sub>d,1</sub>·z<sub>d,2</sub> = 0, where z<sub>d,f</sub> = α<sub>d,f</sub>·e<sup>iφ<sub>d,f</sub></sup>
+— the per-dial <i>products</i> of the two notes' weights, in difference-phase and
+sum-phase form. Dedicated dials satisfy both trivially (every product is 0); shared
+dials must cancel them by arrangement — and with only 2 dials, these plus each note's
+own circle condition have no common solution, which is why “collide” can't be healed.</div>
+
+<div class="row" style="margin-top:12px"><div>
+<h4>② the dossier plane — circle, or ellipse</h4>
 <canvas id="cvF" width="430" height="430"></canvas>
 <div class="legend"><span class="dot" style="background:#1f77b4"></span>dossier(a) &nbsp;
 <span class="dot" style="background:#2ca02c"></span>dossier(b) &nbsp;
 <span class="dot" style="background:#d62728"></span>readout = dossier(a+b) &nbsp;·&nbsp;
 dashed grey = unit circle</div>
-</div><div style="flex:1;min-width:440px">
-<canvas id="cvFl" width="560" height="240"></canvas>
+</div><div style="flex:1;min-width:420px">
+<h4>③ the readout — assumed perfect, for now</h4>
+<div class="legend" id="Fread" style="font-size:13px;line-height:1.95"></div>
+</div></div>
+
+<h4>④ the unembedding table Wᵁ (113 candidate rows × <span id="FuT">2 dials</span>,
+drawn transposed) — the readout is dotted against every one</h4>
+<canvas id="cvFu" width="1040" height="176"></canvas>
+<div class="legend">solid red outline: the machine's argmax · dashed black outline:
+the truth, when they disagree · hover any cell</div>
+
+<h4>⑤ 113 dot products → logits → argmax</h4>
+<canvas id="cvFl" width="1040" height="240"></canvas>
 <div class="legend" id="Finfo" style="font-size:12.5px;line-height:1.8"></div>
-</div></div></div>
+</div>
+<div id="Ftip" style="position:fixed;pointer-events:none;background:#141a26;color:#fff;
+font-size:12px;padding:5px 9px;border-radius:7px;display:none;z-index:9;max-width:330px;
+line-height:1.5"></div>
 
 </div><script>
 "use strict";
@@ -588,85 +645,280 @@ ErebuildCircles(); drawE(1,1,1);
 
 /* ───────── Panel F ───────── */
 const cvF=$("cvF"),ctxF=cvF.getContext("2d"),cvFl=$("cvFl"),ctxFl=cvFl.getContext("2d");
+const cvFe=$("cvFe"),ctxFe=cvFe.getContext("2d"),cvFu=$("cvFu"),ctxFu=cvFu.getContext("2d");
+const cvFz=$("cvFz"),ctxFz=cvFz.getContext("2d");
+const Ftip=$("Ftip");
+const FX0=152, FCW=7.7;                    // table grids: left offset, cell width
+// machine description: dials = list of term-lists; each term {f: freq index, phi, g}
+function Fpars(){
+  const p=[+$("Fp1").value/100,+$("Fp2").value/100,+$("Fp3").value/100,+$("Fp4").value/100];
+  const g=[+$("Fg1").value/100,+$("Fg2").value/100,+$("Fg3").value/100,+$("Fg4").value/100];
+  const s2=$("Fs2").checked, colld=s2&&$("Fcol").checked;
+  const freqs=s2?[+$("Fk").value,+$("Fk2").value]:[+$("Fk").value];
+  const t=i=>({f:i>1?1:0, phi:p[i], g:g[i]});
+  let dials;
+  if(!s2)        dials=[[t(0)],[t(1)]];
+  else if(colld) dials=[[t(0),t(2)],[t(1),t(3)]];
+  else           dials=[[t(0)],[t(1)],[t(2)],[t(3)]];
+  return { a:+$("Fa").value, b:+$("Fb").value, freqs, dials, s2, colld, p, g,
+           k:freqs[0], D:dials.length };
+}
+function Fcol(x,pr){
+  return pr.dials.map(ts=>ts.reduce(
+    (s,t)=>s+t.g*Math.cos(TAU*pr.freqs[t.f]*x/P - t.phi), 0));
+}
+// per-frequency complex dial weights z_{d,f} = α e^{iφ} (0 if dial doesn't carry f)
+function Fz(pr,f){
+  return pr.dials.map(ts=>{const t=ts.find(t=>t.f===f);
+    return t?[t.g*Math.cos(t.phi), t.g*Math.sin(t.phi)]:[0,0];});
+}
+function Fheat(ctx,v,x,y,w,h){
+  ctx.fillStyle = v>=0 ? `rgba(31,119,180,${Math.min(1,Math.abs(v))})`
+                       : `rgba(214,39,40,${Math.min(1,Math.abs(v))})`;
+  ctx.fillRect(x,y,w,h);
+}
+const f3v=v=>(v<0?"−":"+")+Math.abs(v).toFixed(3);
+// complex helpers on [re,im]
+const cAdd=(a,b)=>[a[0]+b[0],a[1]+b[1]], cMul=(a,b)=>[a[0]*b[0]-a[1]*b[1],a[0]*b[1]+a[1]*b[0]];
+const cConj=a=>[a[0],-a[1]], cAbs=a=>Math.hypot(a[0],a[1]);
 function drawF(){
-  const a=+$("Fa").value, b=+$("Fb").value, k=+$("Fk").value;
-  const p1=+$("Fp1").value/100, g1=+$("Fg1").value/100;
-  const p2=+$("Fp2").value/100, g2=+$("Fg2").value/100;
-  $("FaV").textContent=a; $("FbV").textContent=b; $("FkV").textContent=k;
-  $("Fp1V").textContent=p1.toFixed(2); $("Fg1V").textContent=g1.toFixed(2);
-  $("Fp2V").textContent=p2.toFixed(2); $("Fg2V").textContent=g2.toFixed(2);
-  const psi=x=>TAU*k*x/P;
-  const col=x=>[g1*Math.cos(psi(x)-p1), g2*Math.cos(psi(x)-p2)];
+  const pr=Fpars(); const {a,b,freqs,dials,s2,colld,p,g,D}=pr;
+  $("FaV").textContent=a; $("FbV").textContent=b; $("FkV").textContent=freqs[0];
+  $("Fk2V").textContent=$("Fk2").value;
+  for(let i=0;i<4;i++){ $("Fp"+(i+1)+"V").textContent=p[i].toFixed(2);
+                        $("Fg"+(i+1)+"V").textContent=g[i].toFixed(2); }
+  $("FeT").textContent=D+" dial"+(D>1?"s":""); $("FuT").textContent=D+" dial"+(D>1?"s":"");
+  const col=x=>Fcol(x,pr);
   const s=(a+b)%P;
-  // junk / ellipticity: E = |g1²e^{2iφ1}+g2²e^{2iφ2}| / (g1²+g2²)
-  const T=g1*g1+g2*g2;
-  const jr=g1*g1*Math.cos(2*p1)+g2*g2*Math.cos(2*p2);
-  const ji=g1*g1*Math.sin(2*p1)+g2*g2*Math.sin(2*p2);
-  const E=Math.hypot(jr,ji)/T;
-  const ax1=Math.sqrt(T*(1+E)/2), ax2=Math.sqrt(T*(1-E)/2);
-  const uv=g1*g1*Math.cos(p1)*Math.sin(p1)+g2*g2*Math.cos(p2)*Math.sin(p2); // u·v
-  // ── left: stored-value space
-  const cx=215,cy=215,sc=140;
+  const psi=(f,x)=>TAU*freqs[f]*x/P;
+  const gnorm=Math.max(...dials.map(ts=>ts.reduce((s,t)=>s+t.g,0)));
+  const dlab=d=>colld?`dial ${d+1} (chord)`:
+    `dial ${d+1} k=${freqs[dials[d][0].f]} φ=${dials[d][0].phi.toFixed(2)}`;
+  // per-frequency stats: T_f, in-plane ellipticity E_f, cross-plane collision
+  const Z=freqs.map((_,f)=>Fz(pr,f));
+  const T=Z.map(z=>z.reduce((s,c)=>s+c[0]*c[0]+c[1]*c[1],0));
+  const Ef=Z.map((z,f)=>cAbs(z.reduce((s,c)=>cAdd(s,cMul(c,c)),[0,0]))/(T[f]||1));
+  let coll=0;
+  if(s2){
+    const s1=Z[0].reduce((s,c,d)=>cAdd(s,cMul(c,cConj(Z[1][d]))),[0,0]);
+    const s2s=Z[0].reduce((s,c,d)=>cAdd(s,cMul(c,Z[1][d])),[0,0]);
+    coll=Math.max(cAbs(s1),cAbs(s2s))/Math.sqrt((T[0]||1)*(T[1]||1));
+  }
+  // ── ① one-hots + embedding table
+  const EY=d=>44+d*36, Ebot=EY(D-1)+26;
+  ctxFe.clearRect(0,0,1040,204);
+  ctxFe.font="11px sans-serif"; ctxFe.fillStyle="#333";
+  ctxFe.fillText("one-hot a",4,15); ctxFe.fillText("one-hot b",4,31);
+  for(let d=0;d<D;d++){ ctxFe.fillStyle="#333"; ctxFe.fillText(dlab(d),4,EY(d)+17); }
+  for(let x=0;x<P;x++){
+    const X=FX0+x*FCW;
+    ctxFe.fillStyle=(x===a)?"#1f77b4":"#e3e7f0"; ctxFe.fillRect(X,6,FCW-1.2,11);
+    ctxFe.fillStyle=(x===b)?"#2ca02c":"#e3e7f0"; ctxFe.fillRect(X,22,FCW-1.2,11);
+    const q=col(x);
+    for(let d=0;d<D;d++) Fheat(ctxFe,q[d]/gnorm,X,EY(d),FCW-1.2,26);
+  }
+  const outl=(x,cl)=>{ ctxFe.strokeStyle=cl; ctxFe.lineWidth=1.7;
+    ctxFe.strokeRect(FX0+x*FCW-1.4,EY(0)-2,FCW+1.4,Ebot-EY(0)+4); };
+  outl(a,"#1f77b4"); outl(b,"#2ca02c");
+  ctxFe.fillStyle="#8a93a6"; ctxFe.fillText("x=0",FX0,Ebot+14);
+  ctxFe.fillText("x=112",FX0+112*FCW-24,Ebot+14);
+  // summoned columns — every term's subtraction shown before its cosine resolves
+  const cell=(x,d)=>dials[d].map(t=>{
+    const pm=psi(t.f,x)%TAU;
+    return `${t.g.toFixed(2)}·cos(${pm.toFixed(3)} − ${t.phi.toFixed(2)}) =
+      ${t.g.toFixed(2)}·cos(${(pm-t.phi).toFixed(3)}) = ${f3v(t.g*Math.cos(pm-t.phi))}`;
+  }).join("  +  ");
+  const em=(x,nm)=>{
+    const pegs=freqs.map((k,f)=>`k=${k}: peg (${k}·${x}) mod 113 = <b>${(k*x)%P}</b>,
+      ψ = ${(psi(f,x)%TAU).toFixed(3)} rad`).join(" &nbsp;·&nbsp; ");
+    const ds=dials.map((_,d)=>`dial ${d+1}: ${cell(x,d)}${dials[d].length>1?
+      ` = <b>${f3v(col(x)[d])}</b>`:""}`).join("<br>&nbsp;&nbsp;");
+    return `<b>col<sub>${nm}=${x}</sub></b> — ${pegs}<br>&nbsp;&nbsp;${ds}`; };
+  $("Fembd").innerHTML=em(a,"a")+"<br>"+em(b,"b");
+  // ── ①b the health identities: doubled-phase arrows tip-to-tail
+  ctxFz.clearRect(0,0,1040,150);
+  const diagrams=freqs.map((k,f)=>({
+    title:`plane k=${k}:  Σ α²·e^(2iφ)`,
+    terms:Z[f].filter(z=>z[0]||z[1]).map(z=>cMul(z,z)),
+    val:Ef[f], lab:"E"}));
+  if(s2){
+    const tA=[],tB=[];
+    Z[0].forEach((z,d)=>{ if((z[0]||z[1])&&(Z[1][d][0]||Z[1][d][1])){
+      tA.push(cMul(z,cConj(Z[1][d]))); tB.push(cMul(z,Z[1][d])); }});
+    const nn=Math.sqrt((T[0]||1)*(T[1]||1));
+    diagrams.push({title:"planes:  Σ z₁·z̄₂  (angles φ₁−φ₂)",terms:tA,
+      val:tA.length?cAbs(tA.reduce(cAdd,[0,0]))/nn:0,lab:"C"});
+    diagrams.push({title:"planes:  Σ z₁·z₂  (angles φ₁+φ₂)",terms:tB,
+      val:tB.length?cAbs(tB.reduce(cAdd,[0,0]))/nn:0,lab:"C"});
+  }
+  const dw=1040/diagrams.length;
+  diagrams.forEach((dg,i)=>{
+    const cx=dw*i+dw/2, cy=82, sc=27;
+    ctxFz.strokeStyle="#e3e7f0";
+    ctxFz.beginPath();ctxFz.moveTo(cx-62,cy);ctxFz.lineTo(cx+62,cy);ctxFz.stroke();
+    ctxFz.beginPath();ctxFz.moveTo(cx,cy-56);ctxFz.lineTo(cx,cy+56);ctxFz.stroke();
+    ctxFz.fillStyle="#333"; ctxFz.font="11.5px sans-serif"; ctxFz.textAlign="center";
+    ctxFz.fillText(dg.title,cx,14);
+    if(!dg.terms.length){
+      ctxFz.fillStyle="#1b7f3b";
+      ctxFz.fillText("every term is 0 — dials are dedicated ✓",cx,cy+4);
+    } else {
+      let px=cx,py=cy;
+      const cols=["#1f77b4","#9467bd","#e08a2e","#2ca02c"];
+      dg.terms.forEach((t,j)=>{
+        const nx=px+sc*t[0], ny=py-sc*t[1];
+        ctxFz.strokeStyle=cols[j%4]; ctxFz.lineWidth=2.6;
+        ctxFz.beginPath(); ctxFz.moveTo(px,py); ctxFz.lineTo(nx,ny); ctxFz.stroke();
+        ctxFz.fillStyle=cols[j%4];
+        ctxFz.beginPath(); ctxFz.arc(nx,ny,2.6,0,TAU); ctxFz.fill();
+        px=nx; py=ny; });
+      ctxFz.setLineDash([3,3]); ctxFz.strokeStyle="#d62728"; ctxFz.lineWidth=1.2;
+      ctxFz.beginPath(); ctxFz.moveTo(cx,cy); ctxFz.lineTo(px,py); ctxFz.stroke();
+      ctxFz.setLineDash([]);
+      ctxFz.fillStyle="#d62728"; ctxFz.beginPath(); ctxFz.arc(px,py,4.5,0,TAU); ctxFz.fill();
+    }
+    ctxFz.fillStyle= dg.val<0.02 ? "#1b7f3b" : "#c22";
+    ctxFz.fillText(`${dg.lab} = ${dg.val.toFixed(3)} ${dg.val<0.02?"— loop closed ✓":"— loop open ✗"}`,cx,144);
+    ctxFz.textAlign="start";
+  });
+  // ── ② dossier plane(s)
   ctxF.clearRect(0,0,430,430);
-  ctxF.strokeStyle="#e3e7f0";
-  ctxF.beginPath();ctxF.moveTo(10,cy);ctxF.lineTo(420,cy);ctxF.stroke();
-  ctxF.beginPath();ctxF.moveTo(cx,10);ctxF.lineTo(cx,420);ctxF.stroke();
-  ctxF.fillStyle="#8a93a6"; ctxF.font="11px sans-serif";
-  ctxF.fillText("dim 1 →",386,cy+14); ctxF.fillText("dim 2 ↑",cx+6,20);
-  ctxF.setLineDash([4,4]); ctxF.strokeStyle="#c9cfdd";
-  ctxF.beginPath(); ctxF.arc(cx,cy,sc,0,TAU); ctxF.stroke(); ctxF.setLineDash([]);
-  // winding path in token order (star polygon, squashed onto the ellipse)
-  ctxF.strokeStyle="rgba(120,150,220,0.30)"; ctxF.lineWidth=0.7; ctxF.beginPath();
-  for(let x=0;x<=P;x++){ const q=col(x%P);
-    const X=cx+sc*q[0], Y=cy-sc*q[1]; x?ctxF.lineTo(X,Y):ctxF.moveTo(X,Y); }
-  ctxF.stroke();
-  // the 113 dossiers
-  ctxF.fillStyle="#aab8d6";
-  for(let x=0;x<P;x++){ const q=col(x);
-    ctxF.beginPath(); ctxF.arc(cx+sc*q[0],cy-sc*q[1],1.8,0,TAU); ctxF.fill(); }
-  const mark=(x,cl,r)=>{ const q=col(x);
-    ctxF.fillStyle=cl; ctxF.beginPath(); ctxF.arc(cx+sc*q[0],cy-sc*q[1],r,0,TAU); ctxF.fill(); };
-  mark(a,"#1f77b4",6); mark(b,"#2ca02c",6); mark(s,"#d62728",7);
+  ctxF.font="11px sans-serif";
   const qs=col(s);
-  ctxF.fillStyle="#111"; ctxF.font="12px sans-serif";
-  ctxF.fillText(`(${qs[0].toFixed(2)}, ${qs[1].toFixed(2)})`, cx+sc*qs[0]+9, cy-sc*qs[1]-8);
-  // ── right: decode
+  const panel=(cx,cy,sc,dx,dy,label)=>{
+    ctxF.strokeStyle="#e3e7f0";
+    ctxF.beginPath();ctxF.moveTo(cx-sc*1.45,cy);ctxF.lineTo(cx+sc*1.45,cy);ctxF.stroke();
+    ctxF.beginPath();ctxF.moveTo(cx,cy-sc*1.45);ctxF.lineTo(cx,cy+sc*1.45);ctxF.stroke();
+    ctxF.setLineDash([4,4]); ctxF.strokeStyle="#c9cfdd";
+    ctxF.beginPath(); ctxF.arc(cx,cy,sc,0,TAU); ctxF.stroke(); ctxF.setLineDash([]);
+    ctxF.strokeStyle="rgba(120,150,220,0.30)"; ctxF.lineWidth=0.7; ctxF.beginPath();
+    for(let x=0;x<=P;x++){ const q=col(x%P);
+      const X=cx+sc*q[dx], Y=cy-sc*q[dy]; x?ctxF.lineTo(X,Y):ctxF.moveTo(X,Y); }
+    ctxF.stroke();
+    ctxF.fillStyle="#aab8d6";
+    for(let x=0;x<P;x++){ const q=col(x);
+      ctxF.beginPath(); ctxF.arc(cx+sc*q[dx],cy-sc*q[dy],1.6,0,TAU); ctxF.fill(); }
+    const mark=(x,cl,r)=>{ const q=col(x);
+      ctxF.fillStyle=cl; ctxF.beginPath(); ctxF.arc(cx+sc*q[dx],cy-sc*q[dy],r,0,TAU); ctxF.fill(); };
+    mark(a,"#1f77b4",5); mark(b,"#2ca02c",5); mark(s,"#d62728",6);
+    ctxF.fillStyle="#8a93a6"; ctxF.fillText(label, cx-sc*1.4, cy-sc*1.45+11);
+  };
+  if(!s2 || colld){ panel(215,215,140,0,1,colld?"both notes, dials 1–2 (collided)":"dials 1–2");
+    ctxF.fillStyle="#111"; ctxF.font="12px sans-serif";
+    ctxF.fillText(`(${qs[0].toFixed(2)}, ${qs[1].toFixed(2)})`,215+140*qs[0]+9,215-140*qs[1]-8);
+  } else {
+    panel(110,215,62,0,1,`plane 1 · k=${freqs[0]} (dials 1,2)`);
+    panel(320,215,62,2,3,`plane 2 · k=${freqs[1]} (dials 3,4)`);
+  }
+  // ── ③ readout narration
+  const ca=col(a), cb=col(b);
+  const vec=q=>"("+q.map(f3v).join(", ")+")";
+  $("Fread").innerHTML=
+   `col<sub>a=${a}</sub> = ${vec(ca)}<br>col<sub>b=${b}</sub> = ${vec(cb)}<br>
+    <b>attention</b> (Act 2) fetches both columns into the “=” slot — transport, no math.<br>
+    <b>MLP</b> (Act 3) performs the angle addition${s2?" on every circle at once":""}.
+    The result is exactly the column that c = (${a}+${b}) mod 113 = ${s} would own:<br>
+    <b>readout = col<sub>${s}</sub> = ${vec(qs)}</b> — stored-style numbers;
+    no angle, no arctan, no φ anywhere at runtime.`;
+  // ── ④ unembedding table + argmax outline
   const W=[]; for(let c=0;c<P;c++) W.push(col(c));
-  const lg=W.map(q=>q[0]*qs[0]+q[1]*qs[1]);
-  const sig=c=>0.5*T*Math.cos(psi(s)-psi(c));
+  const dot=(u,v)=>u.reduce((s,x,i)=>s+x*v[i],0);
+  const lg=W.map(q=>dot(q,qs));
+  let am=0; for(let c=1;c<P;c++) if(lg[c]>lg[am]) am=c;
+  const UY=d=>10+d*34, Ubot=UY(D-1)+26;
+  ctxFu.clearRect(0,0,1040,176);
+  ctxFu.font="11px sans-serif";
+  for(let d=0;d<D;d++){ ctxFu.fillStyle="#333"; ctxFu.fillText(dlab(d),4,UY(d)+17); }
+  for(let c=0;c<P;c++){ const X=FX0+c*FCW;
+    for(let d=0;d<D;d++) Fheat(ctxFu,W[c][d]/gnorm,X,UY(d),FCW-1.2,26);
+  }
+  ctxFu.strokeStyle="#d62728"; ctxFu.lineWidth=1.8;
+  ctxFu.strokeRect(FX0+am*FCW-1.4,UY(0)-2,FCW+1.4,Ubot-UY(0)+4);
+  if(am!==s){ ctxFu.strokeStyle="#111"; ctxFu.setLineDash([3,2]);
+    ctxFu.strokeRect(FX0+s*FCW-1.4,UY(0)-2,FCW+1.4,Ubot-UY(0)+4); ctxFu.setLineDash([]); }
+  ctxFu.fillStyle="#8a93a6"; ctxFu.fillText("c=0",FX0,Ubot+14);
+  ctxFu.fillText("c=112",FX0+112*FCW-24,Ubot+14);
+  // ── ⑤ logits
+  const sig=c=>freqs.reduce((v,_,f)=>v+0.5*T[f]*Math.cos(psi(f,s)-psi(f,c)),0);
   let mn=1e9,mx=-1e9;
   for(let c=0;c<P;c++){ mn=Math.min(mn,lg[c],sig(c)); mx=Math.max(mx,lg[c],sig(c)); }
-  ctxFl.clearRect(0,0,560,240);
-  const X=c=>18+528*c/(P-1), Y=v=>218-196*(v-mn)/(mx-mn||1);
-  ctxFl.strokeStyle="#e3e7f0"; ctxFl.beginPath(); ctxFl.moveTo(18,Y(0)); ctxFl.lineTo(546,Y(0)); ctxFl.stroke();
+  ctxFl.clearRect(0,0,1040,240);
+  const X=c=>20+1000*c/(P-1), Y=v=>218-196*(v-mn)/(mx-mn||1);
+  ctxFl.strokeStyle="#e3e7f0"; ctxFl.beginPath(); ctxFl.moveTo(20,Y(0)); ctxFl.lineTo(1020,Y(0)); ctxFl.stroke();
   ctxFl.strokeStyle="#c9cfdd"; ctxFl.setLineDash([4,4]); ctxFl.lineWidth=1.2; ctxFl.beginPath();
   for(let c=0;c<P;c++){ c?ctxFl.lineTo(X(c),Y(sig(c))):ctxFl.moveTo(X(c),Y(sig(c))); }
   ctxFl.stroke(); ctxFl.setLineDash([]);
   ctxFl.strokeStyle="#1f77b4"; ctxFl.lineWidth=1.7; ctxFl.beginPath();
   for(let c=0;c<P;c++){ c?ctxFl.lineTo(X(c),Y(lg[c])):ctxFl.moveTo(X(c),Y(lg[c])); }
   ctxFl.stroke();
-  let am=0; for(let c=1;c<P;c++) if(lg[c]>lg[am]) am=c;
   ctxFl.strokeStyle="#111"; ctxFl.lineWidth=1.6;
   ctxFl.beginPath(); ctxFl.arc(X(s),Y(lg[s]),7,0,TAU); ctxFl.stroke();
   ctxFl.fillStyle="#d62728"; ctxFl.beginPath(); ctxFl.arc(X(am),Y(lg[am]),5.5,0,TAU); ctxFl.fill();
   ctxFl.fillStyle="#555"; ctxFl.font="11px sans-serif";
-  ctxFl.fillText("solid = your machine's logits · dashed = pure interference (junk-free)",18,14);
-  // accuracy over all 113 sums
+  ctxFl.fillText("solid = your machine's logits · dashed = pure interference (junk-free)",20,14);
   let ok=0;
-  for(let s2=0;s2<P;s2++){ const q=col(s2); let bm=0,bv=-1e9;
-    for(let c=0;c<P;c++){ const v=W[c][0]*q[0]+W[c][1]*q[1]; if(v>bv){bv=v;bm=c;} }
-    if(bm===s2) ok++; }
+  for(let s2i=0;s2i<P;s2i++){ const q=col(s2i); let bm=0,bv=-1e9;
+    for(let c=0;c<P;c++){ const v=dot(W[c],q); if(v>bv){bv=v;bm=c;} }
+    if(bm===s2i) ok++; }
   const good = am===s;
+  const efTxt=freqs.map((k,f)=>`E<sub>k=${k}</sub> = <b>${Ef[f].toFixed(3)}</b>`).join(" · ");
   $("Finfo").innerHTML=
-   `u·v = <b>${uv.toFixed(3)}</b> &nbsp;·&nbsp; junk/signal E = <b>${E.toFixed(3)}</b>
-    &nbsp;·&nbsp; ellipse axes <b>${ax1.toFixed(3)}</b> × <b>${ax2.toFixed(3)}</b>
-    ${E<0.02?"— a circle ✓":"— an ellipse"}<br>
-    this problem: machine says <b style='color:${good?"#1b7f3b":"#c22"}'>${am}</b>,
+   `in-plane junk: ${efTxt} (0 = circle)`
+   +(s2?` &nbsp;·&nbsp; plane collision = <b>${coll.toFixed(3)}</b>
+      (0 = orthogonal planes${colld?" — impossible with 2 dials, no phase can fix this":""})`:"")
+   +`<br>this problem: machine says <b style='color:${good?"#1b7f3b":"#c22"}'>${am}</b>,
     truth (${a}+${b}) mod 113 = ${s} ${good?"✓":"✗"}<br>
-    over all 113 possible sums: <b>${ok}/113 correct (${(100*ok/P).toFixed(1)}%)</b>
-    — heal the phases and watch this hit 113/113.`;
+    over all 113 possible sums: <b>${ok}/113 correct (${(100*ok/P).toFixed(1)}%)</b>`;
 }
-["Fa","Fb","Fk","Fp1","Fg1","Fp2","Fg2"].forEach(id=>$(id).addEventListener("input",drawF));
-$("Fortho").onclick=()=>{ $("Fp2").value=((+$("Fp1").value+157)%628); drawF(); };
+function Fenforce(){
+  if(!$("Fideal").checked) return;
+  $("Fp2").value=(+$("Fp1").value+157)%628; $("Fg2").value=$("Fg1").value;
+  $("Fp4").value=(+$("Fp3").value+157)%628; $("Fg4").value=$("Fg3").value;
+}
+function FidealUI(){
+  const on=$("Fideal").checked;
+  ["Fp2","Fg2","Fp4","Fg4"].forEach(id=>$(id).disabled=on);
+}
+["Fa","Fb","Fk","Fk2","Fp1","Fg1","Fp2","Fg2","Fp3","Fg3","Fp4","Fg4"]
+  .forEach(id=>$(id).addEventListener("input",()=>{Fenforce();drawF();}));
+$("Fideal").addEventListener("change",()=>{FidealUI();Fenforce();drawF();});
+$("Fs2").addEventListener("change",()=>{
+  $("Fs2ctl").style.display=$("Fs2").checked?"inline":"none"; Fenforce(); drawF(); });
+$("Fcol").addEventListener("change",()=>{Fenforce();drawF();});
+$("Fortho").onclick=()=>{ $("Fp2").value=(+$("Fp1").value+157)%628;
+  $("Fp4").value=(+$("Fp3").value+157)%628; drawF(); };
+// hover formulas on both tables
+function FtipShow(html,e){ Ftip.innerHTML=html; Ftip.style.display="block";
+  Ftip.style.left=(e.clientX+14)+"px"; Ftip.style.top=(e.clientY+10)+"px"; }
+function FcellTip(x,d,pr,isRow){
+  const terms=pr.dials[d].map(t=>{
+    const k=pr.freqs[t.f], pm=(TAU*k*x/P)%TAU;
+    return `k=${k}: peg ${(k*x)%P}, ψ=${pm.toFixed(3)} → ${t.g.toFixed(2)}·cos(${pm.toFixed(3)}
+      − ${t.phi.toFixed(2)}) = ${t.g.toFixed(2)}·cos(${(pm-t.phi).toFixed(3)}) =
+      ${f3v(t.g*Math.cos(pm-t.phi))}`; });
+  const v=Fcol(x,pr)[d];
+  return `${isRow?`row<sub>c=${x}</sub>`:`E`}[dial ${d+1}]${isRow?"":`[token ${x}]`}<br>`
+    +terms.join("<br>+ ")
+    +(terms.length>1?`<br>= <b>${v.toFixed(4)}</b> — a chord: one wire, two notes`:``)
+    +(isRow?`<br>the frozen dossier candidate ${x} would own`
+           :`<br>carved in at training time, looked up at runtime`);
+}
+cvFe.addEventListener("mousemove",e=>{
+  const x=Math.floor((e.offsetX-FX0)/FCW), pr=Fpars();
+  if(x<0||x>=P){Ftip.style.display="none";return;}
+  if(e.offsetY<38){
+    FtipShow(`token ${x} — a 1 in slot ${x}, zeros elsewhere. Multiplying E by this
+      one-hot <i>selects column ${x}</i>: that is the whole embedding step.`,e); return; }
+  const d=Math.floor((e.offsetY-42)/36);
+  if(d<0||d>=pr.D){Ftip.style.display="none";return;}
+  FtipShow(FcellTip(x,d,pr,false),e);
+});
+cvFu.addEventListener("mousemove",e=>{
+  const c=Math.floor((e.offsetX-FX0)/FCW), pr=Fpars();
+  const d=Math.floor((e.offsetY-8)/34);
+  if(c<0||c>=P||d<0||d>=pr.D){Ftip.style.display="none";return;}
+  FtipShow(FcellTip(c,d,pr,true)+`<br>logit(${c}) = readout · this row`,e);
+});
+for(const cv of [cvFe,cvFu]) cv.addEventListener("mouseleave",()=>Ftip.style.display="none");
 drawF();
 </script></body></html>
