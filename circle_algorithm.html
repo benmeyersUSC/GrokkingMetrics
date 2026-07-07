@@ -271,6 +271,37 @@ and b-query rows write into positions the readout never looks at.</p>
 <div class="legend" id="Fainfo" style="font-size:12.5px;line-height:1.9;flex:1;min-width:300px"></div>
 </div></div>
 
+<h4>②b · the MLP — five ReLUs double the angle</h4>
+<p class="sub">This runs on the <b>actual attention output</b> in dial coordinates — so it
+feels your phases live. Five ReLU neurons at fixed axes 72° apart <b>project</b> the
+incoming point (→ cos(β−ψⱼ), β = its dial-angle), <b>rectify</b> (→ an octave cos(2(β−ψⱼ))
+is born), and the output layer sums them so only the doubled term survives — pointing at
+<b>2β</b>, then rotated by <b>φ₁</b> so it lands in the frame the dossiers live in (the
+output weights are <b>phase-locked to the embedding</b> — the co-adaptation training
+finds; without it, doubling would double the frame's rotation and miss). With an
+<b>orthonormal</b> embedding (hit <b>heal</b> or tick <b>ideal mode</b>) the input is a
+true circle point and the output lands on col<sub>c</sub>. <b>Curse the gains or
+perpendicularity</b> and the input becomes an <b>ellipse</b> point these fixed neurons
+can't un-shear — it drifts off. Slide φ and α and watch.</p>
+<div class="row"><div>
+<canvas id="cvMproj" width="330" height="330"></canvas>
+<div class="legend">the 5 axes ψⱼ and the half-angle point's shadow on each
+(<span style="color:#2ca02c">green</span> fires, <span style="color:#8a93a6">grey</span>
+killed by ReLU)</div></div>
+<div style="flex:1;min-width:360px">
+<canvas id="cvMbars" width="520" height="200"></canvas>
+<div class="legend">per neuron: preactivation zⱼ = cos(μ−ψⱼ) and hⱼ = ReLU(zⱼ)</div></div></div>
+<h4 style="font-size:14px;margin-top:14px">the network's output as the input angle sweeps — it traces cos(2φ), double the frequency</h4>
+<canvas id="cvMcurve" width="1040" height="220"></canvas>
+<div class="legend">solid blue = out_x(φ) = 3π/5·Σⱼcos2ψⱼ·ReLU(cos(φ−ψⱼ)) · dashed = ideal cos(2φ)
+· faint = cos(φ) for contrast · vertical line = your current μ</div>
+<div id="Mcancel" class="anat" style="margin-top:12px"></div>
+<div class="row" style="margin-top:12px"><div>
+<canvas id="cvMout" width="330" height="330"></canvas>
+<div class="legend">the doubled point emerges at 2μ (<span style="color:#d62728">red</span>) —
+landing on the answer's peg col<sub>c</sub> (hollow)</div></div>
+<div class="legend" id="Minfo" style="flex:1;min-width:320px;font-size:12.5px;line-height:1.95"></div></div>
+
 <div class="row" style="margin-top:12px"><div>
 <h4>② the dossier plane — circle, or ellipse</h4>
 <canvas id="cvF" width="430" height="430"></canvas>
@@ -687,6 +718,8 @@ const cvF=$("cvF"),ctxF=cvF.getContext("2d"),cvFl=$("cvFl"),ctxFl=cvFl.getContex
 const cvFe=$("cvFe"),ctxFe=cvFe.getContext("2d"),cvFu=$("cvFu"),ctxFu=cvFu.getContext("2d");
 const cvFz=$("cvFz"),ctxFz=cvFz.getContext("2d");
 const cvFa=$("cvFa"),ctxFa=cvFa.getContext("2d");
+const ctxMp=$("cvMproj").getContext("2d"), ctxMb=$("cvMbars").getContext("2d");
+const ctxMc=$("cvMcurve").getContext("2d"), ctxMo=$("cvMout").getContext("2d");
 const Ftip=$("Ftip");
 const FX0=152, FCW=7.7;                    // table grids: left offset, cell width
 // machine description: dials = list of term-lists; each term {f: freq index, phi, g}
@@ -949,6 +982,7 @@ function drawF(){
     truth (${a}+${b}) mod 113 = ${s} ${good?"✓":"✗"}<br>
     over all 113 possible sums: <b>${ok}/113 correct (${(100*ok/P).toFixed(1)}%)</b>`;
   drawAtt();
+  drawMLP();
 }
 function Fenforce(){
   if(!$("Fideal").checked) return;
@@ -1021,6 +1055,119 @@ function drawAtt(){
     <b>${Math.hypot(out[0],out[1]).toFixed(3)}</b>.<br>
     “=” walks out with (${fmt(out[0])}, ${fmt(out[1])}, −1). The MLP will <b>double</b> this
     angle (2μ) to reach col<sub>${s}</sub> — the readout for (${a}+${b}) mod 113 = ${s}.`;
+}
+// ── ②b the MLP doubler: 5 ReLU neurons ──
+const MLPN=5, MLPsc=3*Math.PI/5;
+const MLPpsi=[...Array(MLPN)].map((_,j)=>TAU*j/MLPN);
+function mlpOutXY(phi){ let ox=0,oy=0;
+  for(let j=0;j<MLPN;j++){ const h=Math.max(Math.cos(phi-MLPpsi[j]),0);
+    ox+=h*Math.cos(2*MLPpsi[j]); oy+=h*Math.sin(2*MLPpsi[j]); }
+  return [MLPsc*ox, MLPsc*oy]; }
+function drawMLP(){
+  const pr=Fpars(), k=pr.freqs[0], a=pr.a, b=pr.b, c=(a+b)%P;
+  const ca=Fcol(a,pr), cb=Fcol(b,pr);
+  const inp=[0.5*(ca[0]+cb[0]), 0.5*(ca[1]+cb[1])];      // ACTUAL attention output (dial coords, plane 1)
+  const beta=((Math.atan2(inp[1],inp[0])%TAU)+TAU)%TAU, rho=Math.hypot(inp[0],inp[1]);
+  const colc=Fcol(c,pr), cang=((Math.atan2(colc[1],colc[0])%TAU)+TAU)%TAU, rc=Math.hypot(colc[0],colc[1]);
+  const z=MLPpsi.map(ps=>inp[0]*Math.cos(ps)+inp[1]*Math.sin(ps)), h=z.map(v=>Math.max(v,0));
+  const fired=j=>h[j]>1e-9;
+  const phi0=pr.p[0];   // output layer phase-locked to the embedding's φ₁ (the co-adaptation)
+  let oxr=0,oyr=0; for(let j=0;j<MLPN;j++){ oxr+=h[j]*Math.cos(2*MLPpsi[j]+phi0); oyr+=h[j]*Math.sin(2*MLPpsi[j]+phi0); }
+  const oang=((Math.atan2(oyr,oxr)%TAU)+TAU)%TAU;
+  const miss=Math.abs(((oang-cang+Math.PI)%TAU+TAU)%TAU-Math.PI)*180/Math.PI;
+  // ── projection circle (the actual dial plane) ──
+  (function(){ const cx=165,cy=165,R=118;
+    ctxMp.clearRect(0,0,330,330);
+    ctxMp.setLineDash([4,4]); ctxMp.strokeStyle="#c9cfdd";
+    ctxMp.beginPath(); ctxMp.arc(cx,cy,R,0,TAU); ctxMp.stroke(); ctxMp.setLineDash([]);
+    for(let j=0;j<MLPN;j++){ const ps=MLPpsi[j], ux=Math.cos(ps), uy=Math.sin(ps);
+      ctxMp.strokeStyle=fired(j)?"rgba(44,160,44,0.5)":"#dfe4ee"; ctxMp.lineWidth=1.4;
+      ctxMp.beginPath(); ctxMp.moveTo(cx-R*ux,cy+R*uy); ctxMp.lineTo(cx+R*ux,cy-R*uy); ctxMp.stroke();
+      ctxMp.fillStyle="#8a93a6"; ctxMp.font="10px sans-serif";
+      ctxMp.fillText("ψ"+j, cx+(R+8)*ux-5, cy-(R+8)*uy+4);
+      const sx=cx+R*z[j]*ux, sy=cy-R*z[j]*uy;
+      ctxMp.setLineDash([3,3]); ctxMp.strokeStyle="rgba(0,0,0,0.18)";
+      ctxMp.beginPath(); ctxMp.moveTo(cx+R*inp[0],cy-R*inp[1]); ctxMp.lineTo(sx,sy); ctxMp.stroke(); ctxMp.setLineDash([]);
+      ctxMp.fillStyle=fired(j)?"#2ca02c":"#aab8d6";
+      ctxMp.beginPath(); ctxMp.arc(sx,sy,fired(j)?4.5:3,0,TAU); ctxMp.fill(); }
+    ctxMp.strokeStyle="#d62728"; ctxMp.lineWidth=2;
+    ctxMp.beginPath(); ctxMp.moveTo(cx,cy); ctxMp.lineTo(cx+R*inp[0],cy-R*inp[1]); ctxMp.stroke();
+    ctxMp.fillStyle="#d62728"; ctxMp.beginPath(); ctxMp.arc(cx+R*inp[0],cy-R*inp[1],5,0,TAU); ctxMp.fill();
+    ctxMp.fillStyle="#111"; ctxMp.font="11px sans-serif";
+    ctxMp.fillText("attention out (β)",Math.min(cx+R*inp[0]+7,206),cy-R*inp[1]);
+  })();
+  // ── pre-act / ReLU bars ──
+  (function(){ ctxMb.clearRect(0,0,520,200);
+    const x0=40, w=70, y0=95, sc=62;
+    ctxMb.strokeStyle="#e3e7f0"; ctxMb.beginPath(); ctxMb.moveTo(20,y0); ctxMb.lineTo(500,y0); ctxMb.stroke();
+    ctxMb.fillStyle="#8a93a6"; ctxMb.font="10px sans-serif"; ctxMb.fillText("0",6,y0+3);
+    for(let j=0;j<MLPN;j++){ const bx=x0+j*w;
+      ctxMb.fillStyle="#cdd6e6"; const zh=sc*z[j];
+      ctxMb.fillRect(bx,y0-Math.max(zh,0),22,Math.abs(zh)); if(zh<0) ctxMb.fillRect(bx,y0,22,-zh);
+      ctxMb.fillStyle=fired(j)?"#2ca02c":"#e3a6a6"; const hh=sc*h[j];
+      ctxMb.fillRect(bx+26,y0-hh,22,hh);
+      ctxMb.fillStyle="#333"; ctxMb.font="10px sans-serif"; ctxMb.fillText("n"+j, bx+16, 190);
+      ctxMb.fillText(z[j].toFixed(2), bx-2, zh>=0?y0-Math.max(zh,0)-4:y0+Math.abs(zh)+12);
+    }
+    ctxMb.fillStyle="#8a93a6"; ctxMb.fillText("light = zⱼ (pre-act, signed)   solid = hⱼ = ReLU(zⱼ)",40,18);
+  })();
+  // ── doubling curve: the fixed doubler's transfer (unit input → cos2φ), current β marked ──
+  (function(){ ctxMc.clearRect(0,0,1040,220);
+    const X=p=>20+1000*p/TAU, Y=v=>110-92*v;
+    ctxMc.strokeStyle="#e3e7f0"; ctxMc.beginPath(); ctxMc.moveTo(20,110); ctxMc.lineTo(1020,110); ctxMc.stroke();
+    ctxMc.strokeStyle="rgba(120,150,220,0.30)"; ctxMc.lineWidth=1; ctxMc.beginPath();
+    for(let i=0;i<=400;i++){ const p=TAU*i/400; i?ctxMc.lineTo(X(p),Y(Math.cos(p))):ctxMc.moveTo(X(p),Y(Math.cos(p))); } ctxMc.stroke();
+    ctxMc.strokeStyle="#c9cfdd"; ctxMc.setLineDash([4,4]); ctxMc.lineWidth=1.3; ctxMc.beginPath();
+    for(let i=0;i<=400;i++){ const p=TAU*i/400; i?ctxMc.lineTo(X(p),Y(Math.cos(2*p))):ctxMc.moveTo(X(p),Y(Math.cos(2*p))); } ctxMc.stroke(); ctxMc.setLineDash([]);
+    ctxMc.strokeStyle="#1f77b4"; ctxMc.lineWidth=1.9; ctxMc.beginPath();
+    for(let i=0;i<=400;i++){ const p=TAU*i/400, v=mlpOutXY(p)[0]; i?ctxMc.lineTo(X(p),Y(v)):ctxMc.moveTo(X(p),Y(v)); } ctxMc.stroke();
+    ctxMc.strokeStyle="#d62728"; ctxMc.setLineDash([3,3]); ctxMc.beginPath();
+    ctxMc.moveTo(X(beta),8); ctxMc.lineTo(X(beta),212); ctxMc.stroke(); ctxMc.setLineDash([]);
+    ctxMc.fillStyle="#d62728"; ctxMc.beginPath(); ctxMc.arc(X(beta),Y(mlpOutXY(beta)[0]),4.5,0,TAU); ctxMc.fill();
+    ctxMc.fillStyle="#8a93a6"; ctxMc.font="10px sans-serif";
+    ctxMc.fillText("φ=0",18,124); ctxMc.fillText("φ=2π",990,124); ctxMc.fillText("β",X(beta)+4,20);
+  })();
+  // ── cancellation algebra, live (β = the actual input's dial-angle) ──
+  let Sc=0, Sf=0, So=0;
+  for(let j=0;j<MLPN;j++){ Sc+=Math.cos(2*MLPpsi[j]+phi0);
+    Sf+=Math.cos(2*MLPpsi[j]+phi0)*Math.cos(beta-MLPpsi[j]);
+    So+=Math.cos(2*MLPpsi[j]+phi0)*Math.cos(2*beta-2*MLPpsi[j]); }
+  const red=v=>`<span style="color:#c22">${v}</span>`, grn=v=>`<span style="color:#1b7f3b">${v}</span>`;
+  $("Mcancel").innerHTML=
+   `<div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:2">
+    out_x = Σⱼ cos(2ψⱼ+φ₁)·hⱼ , &nbsp; hⱼ ∝ 1/π + ½cos(β−ψⱼ) + (2/3π)cos(2β−2ψⱼ) + … &nbsp;(β = ${beta.toFixed(3)}; output phase-locked by φ₁ = ${phi0.toFixed(3)})<br>
+    ${red("constant:")} &nbsp;&nbsp;(1/π)·Σⱼcos(2ψⱼ+φ₁) &nbsp;= (1/π)·${red(Sc.toFixed(3))} = ${red("0")}<br>
+    ${red("fundamental:")} (½)·Σⱼcos(2ψⱼ+φ₁)·cos(β−ψⱼ) = (½)·${red(Sf.toFixed(3))} = ${red("0")}<br>
+    ${grn("octave:")} &nbsp;&nbsp;&nbsp;(2/3π)·Σⱼcos(2ψⱼ+φ₁)·cos(2β−2ψⱼ) = (2/3π)·${grn(So.toFixed(3))} = ${grn(((2/(3*Math.PI))*So).toFixed(3))} &nbsp;= (5/3π)·cos(2β+φ₁)<br>
+    → output points at ${grn("angle 2β+φ₁")} &nbsp;(the doubled term, rotated into the embedding's frame — hits col_c only if the input was a true circle point)
+   </div>`;
+  // ── output plane: the real dossier locus (ellipse if cursed) + col_c + MLP output ──
+  (function(){ const cx=165,cy=165,R=110;
+    ctxMo.clearRect(0,0,330,330);
+    ctxMo.setLineDash([4,4]); ctxMo.strokeStyle="#c9cfdd";
+    ctxMo.beginPath(); ctxMo.arc(cx,cy,R,0,TAU); ctxMo.stroke(); ctxMo.setLineDash([]);
+    ctxMo.strokeStyle="rgba(120,150,220,0.35)"; ctxMo.lineWidth=0.8; ctxMo.beginPath();
+    for(let t=0;t<=P;t++){ const q=Fcol(t%P,pr); const Xp=cx+R*q[0],Yp=cy-R*q[1]; t?ctxMo.lineTo(Xp,Yp):ctxMo.moveTo(Xp,Yp); }
+    ctxMo.stroke();
+    ctxMo.strokeStyle="#d62728"; ctxMo.lineWidth=1.7;               // col_c hollow (target)
+    ctxMo.beginPath(); ctxMo.arc(cx+R*colc[0],cy-R*colc[1],8,0,TAU); ctxMo.stroke();
+    const px=cx+R*rc*Math.cos(oang), py=cy-R*rc*Math.sin(oang);      // MLP output, at col_c's radius
+    ctxMo.strokeStyle="#111"; ctxMo.lineWidth=1.9; ctxMo.setLineDash(miss>5?[5,3]:[]);
+    ctxMo.beginPath(); ctxMo.moveTo(cx,cy); ctxMo.lineTo(px,py); ctxMo.stroke(); ctxMo.setLineDash([]);
+    ctxMo.fillStyle=miss<5?"#1b7f3b":"#c22"; ctxMo.beginPath(); ctxMo.arc(px,py,5,0,TAU); ctxMo.fill();
+    ctxMo.fillStyle="#111"; ctxMo.font="11px sans-serif";
+    ctxMo.fillText("MLP out", Math.min(px+7,250), py+(py<cy?-4:14));
+    ctxMo.fillStyle="#c22"; ctxMo.fillText("col_"+c, Math.min(cx+R*colc[0]+10,250), cy-R*colc[1]+4);
+  })();
+  $("Minfo").innerHTML=
+   `input from attention (dial coords) = <b>(${inp[0].toFixed(3)}, ${inp[1].toFixed(3)})</b> ·
+    its dial-angle β = <b>${beta.toFixed(3)}</b> rad · fired: <b>${h.filter(v=>v>1e-9).length}/5</b><br>
+    doubled + phase-lock → output angle = <b>${oang.toFixed(3)}</b> rad &nbsp;·&nbsp; target col<sub>${c}</sub>
+    at dial-angle <b>${cang.toFixed(3)}</b> rad<br>
+    miss = <b style="color:${miss<5?'#1b7f3b':'#c22'}">${miss.toFixed(1)}°</b> —
+    ${miss<5?"lands ✓ (orthonormal embedding: the input is a true circle point; the phase-lock aligns the two frames)":
+      "drifts ✗ (cursed embedding: the input is an ellipse point these fixed neurons can't un-shear — orthonormality is what the doubler needs)"}<br>
+    heal the phases (or ideal mode) to snap it back onto col<sub>${c}</sub>. (${a}+${b}) mod 113 = <b>${c}</b>.`;
 }
 ["Fa","Fb","Fk","Fk2","Fp1","Fg1","Fp2","Fg2","Fp3","Fg3","Fp4","Fg4","Fgam"]
   .forEach(id=>$(id).addEventListener("input",()=>{Fenforce();drawF();}));
