@@ -26,6 +26,24 @@ button:hover{background:#f0f3f9}
 .anat td,.anat th{border:1px solid #e3e7f0;padding:3px 9px;text-align:right;
   font-family:ui-monospace,Menlo,monospace;font-size:12px}
 .anat th{background:#f4f6fb;color:#333;font-weight:600}
+.fmat{border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;margin-top:2px}
+.fmat td,.fmat th{border:1px solid #e3e7f0;padding:2px 6px;text-align:right;font-size:11px}
+.fmat th{background:#f4f6fb;color:#555;font-weight:600}
+.fmatwrap{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.fmatwrap .mt{font-size:11.5px;color:#555;text-align:center;margin-bottom:2px}
+.stickyparams{position:sticky;top:54px;z-index:40;background:rgba(255,255,255,0.97);
+  backdrop-filter:blur(5px);margin:0 0 16px;padding:10px 16px 6px;border-radius:12px;
+  border:1px solid #dfe4ee;box-shadow:0 5px 14px -7px rgba(20,26,38,.3);
+  display:flex;gap:18px;align-items:stretch}
+.stickyparams .ctl{margin:4px 0}
+.spleft{flex:1;min-width:0}
+.spright{flex:0 0 auto;min-width:214px;border-left:1px solid #e6eaf1;padding-left:14px;
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#333;line-height:1.55;
+  display:flex;flex-direction:column;justify-content:center}
+.spright .ans{font-size:18px;font-weight:650;color:#1c1e21;margin:-1px 0 3px}
+.spright .lbl{color:#8a93a6}
+.stickyparams input[type=range]{width:120px}
+.stickyparams .ctl{flex-wrap:nowrap}
 </style></head><body>
 <header><h1>The Circle Algorithm</h1>
 <p>Interactive companion to the grokked mod-113 network. Six pictures: the winding map,
@@ -170,6 +188,28 @@ the network actually doing it. {5, 8, 17, 49} is the circuit the trained run cho
 </div>
 
 <!-- ══════════ PANEL F ══════════ -->
+<div class="stickyparams">
+<div class="spleft">
+<div class="ctl">a <input type="range" id="Fa" min="0" max="112" value="81"><span class="val" id="FaV">81</span>
+ &nbsp; b <input type="range" id="Fb" min="0" max="112" value="41"><span class="val" id="FbV">41</span>
+ &nbsp; k <input type="range" id="Fk" min="1" max="56" value="1"><span class="val" id="FkV">1</span></div>
+<div class="ctl">φ₁ <input type="range" id="Fp1" min="0" max="628" value="340"><span class="val" id="Fp1V">3.40</span>
+ &nbsp; α₁ <input type="range" id="Fg1" min="10" max="100" value="100"><span class="val" id="Fg1V">1.00</span>
+ &nbsp;&nbsp; φ₂ <input type="range" id="Fp2" min="0" max="628" value="450"><span class="val" id="Fp2V">4.50</span>
+ &nbsp; α₂ <input type="range" id="Fg2" min="10" max="100" value="100"><span class="val" id="Fg2V">1.00</span></div>
+<div class="ctl"><button id="Fortho" title="set each φ-pair 90° apart — orthonormal">heal → +90°</button>
+ &nbsp; <label title="dependent dials auto-follow — orthogonality enforced as you slide"><input type="checkbox" id="Fideal"> <b>ideal mode</b></label>
+ &nbsp; <label title="grows the machine to 4 dials — one plane per note"><input type="checkbox" id="Fs2"> <b>add 2nd frequency</b></label>
+ <span id="Fs2ctl" style="display:none">
+ &nbsp; k₂ <input type="range" id="Fk2" min="1" max="56" value="8"><span class="val" id="Fk2V">8</span>
+ &nbsp; φ₃ <input type="range" id="Fp3" min="0" max="628" value="100"><span class="val" id="Fp3V">1.00</span>
+ &nbsp; α₃ <input type="range" id="Fg3" min="10" max="100" value="100"><span class="val" id="Fg3V">1.00</span>
+ &nbsp; φ₄ <input type="range" id="Fp4" min="0" max="628" value="257"><span class="val" id="Fp4V">2.57</span>
+ &nbsp; α₄ <input type="range" id="Fg4" min="10" max="100" value="100"><span class="val" id="Fg4V">1.00</span>
+ &nbsp; <label title="cram both notes into dials 1–2 — every cell becomes a chord"><input type="checkbox" id="Fcol"> <b>collide planes</b></label></span></div>
+</div><!--/spleft-->
+<div class="spright" id="Freadout"></div>
+</div><!--/stickyparams-->
 <div class="card"><h2>6 · The two-dial machine (build your own — or curse it)</h2>
 <p class="sub">The middle rung of the ladder. Panel 5 is the <b>pure algorithm</b>
 (closed form, nothing learned); the real-model section below is the <b>trained
@@ -186,31 +226,13 @@ E = |α₁²e<sup>2iφ₁</sup> + α₂²e<sup>2iφ₂</sup>|/(α₁²+α₂²);
 watch 113/113. The combine stage is <i>assumed</i> perfect for now — attention
 (fetch) and the MLP (angle addition) get folded into this machine once Acts 2–3 are
 owned.</p>
-<div class="ctl">a <input type="range" id="Fa" min="0" max="112" value="81"><span class="val" id="FaV">81</span>
- &nbsp; b <input type="range" id="Fb" min="0" max="112" value="41"><span class="val" id="FbV">41</span>
- &nbsp; k <input type="range" id="Fk" min="1" max="56" value="1"><span class="val" id="FkV">1</span></div>
-<div class="ctl">φ₁ <input type="range" id="Fp1" min="0" max="628" value="340"><span class="val" id="Fp1V">3.40</span>
- &nbsp; α₁ <input type="range" id="Fg1" min="10" max="100" value="100"><span class="val" id="Fg1V">1.00</span>
- &nbsp;&nbsp; φ₂ <input type="range" id="Fp2" min="0" max="628" value="450"><span class="val" id="Fp2V">4.50</span>
- &nbsp; α₂ <input type="range" id="Fg2" min="10" max="100" value="100"><span class="val" id="Fg2V">1.00</span>
- &nbsp; <button id="Fortho">heal all: φ-pairs to +90°</button>
- &nbsp; <label><input type="checkbox" id="Fideal"> <b>ideal mode</b> (dependent dials
- auto-follow — orthogonality enforced as you slide)</label></div>
-<div class="ctl"><label><input type="checkbox" id="Fs2"> <b>add second frequency</b>
- (grows the machine to 4 dials — one plane per note)</label>
- <span id="Fs2ctl" style="display:none">
- &nbsp; k₂ <input type="range" id="Fk2" min="1" max="56" value="8"><span class="val" id="Fk2V">8</span>
- &nbsp; φ₃ <input type="range" id="Fp3" min="0" max="628" value="100"><span class="val" id="Fp3V">1.00</span>
- &nbsp; α₃ <input type="range" id="Fg3" min="10" max="100" value="100"><span class="val" id="Fg3V">1.00</span>
- &nbsp; φ₄ <input type="range" id="Fp4" min="0" max="628" value="257"><span class="val" id="Fp4V">2.57</span>
- &nbsp; α₄ <input type="range" id="Fg4" min="10" max="100" value="100"><span class="val" id="Fg4V">1.00</span>
- &nbsp; <label><input type="checkbox" id="Fcol"> <b>collide the planes</b> (cram both
- notes into dials 1–2 — every cell becomes a chord)</label></span></div>
 
 <h4>① one-hot inputs summon columns — the embedding table E (<span id="FeT">2 dials</span> × 113 tokens)</h4>
 <canvas id="cvFe" width="1040" height="204"></canvas>
 <div class="legend">blue = positive, red = negative, brightness = |value| · outlined
-columns: a (blue), b (green) · hover any cell for its formula</div>
+columns: a (blue), b (green) · the <b>type</b> row is +1 for every number and −1 for the
+lone “=” column (far right) — the channel attention reads, ignored by the circle plots ·
+hover any cell</div>
 <div class="legend" id="Fembd" style="font-size:12.5px;line-height:1.9;background:#f4f6fb;
 border-radius:8px;padding:8px 10px;margin-top:8px"></div>
 
@@ -231,6 +253,23 @@ z<sub>d,1</sub>·z<sub>d,2</sub> = 0, where z<sub>d,f</sub> = α<sub>d,f</sub>·
 sum-phase form. Dedicated dials satisfy both trivially (every product is 0); shared
 dials must cancel them by arrangement — and with only 2 dials, these plus each note's
 own circle condition have no common solution, which is why “collide” can't be healed.</div>
+
+<h4>②a · the attention stage — how “=” fetches a and b into one register</h4>
+<div class="ctl"><label><input type="checkbox" id="Fatt" checked> show the full matrices</label>
+ &nbsp; softmax sharpness γ <input type="range" id="Fgam" min="2" max="140" value="60"><span class="val" id="FgamV">6.0</span></div>
+<div id="Fattbox">
+<p class="sub">The 3-dim toy: each token's residual is (dial 1, dial 2, <b>type</b>) — numbers
+carry type +1, “=” carries −1. <b>W_Q</b> reads “=”'s type and flips it to +γ; <b>W_K</b>
+strips all but type; the frozen “=” query then scores +γ on each operand, −γ on itself;
+softmax → (½, ½, ~0) as γ grows; <b>W_V</b> copies the plane and drops type, so the
+weighted average is <b>½·a + ½·b</b> — the half-angle point, which walks out in “=”'s
+residual (with a vestigial −1 riding along). Only the highlighted “=” row is used; the a-
+and b-query rows write into positions the readout never looks at.</p>
+<div class="fmatwrap" id="Fmats"></div>
+<div class="row" style="margin-top:10px"><div>
+<canvas id="cvFa" width="360" height="360"></canvas></div>
+<div class="legend" id="Fainfo" style="font-size:12.5px;line-height:1.9;flex:1;min-width:300px"></div>
+</div></div>
 
 <div class="row" style="margin-top:12px"><div>
 <h4>② the dossier plane — circle, or ellipse</h4>
@@ -647,6 +686,7 @@ ErebuildCircles(); drawE(1,1,1);
 const cvF=$("cvF"),ctxF=cvF.getContext("2d"),cvFl=$("cvFl"),ctxFl=cvFl.getContext("2d");
 const cvFe=$("cvFe"),ctxFe=cvFe.getContext("2d"),cvFu=$("cvFu"),ctxFu=cvFu.getContext("2d");
 const cvFz=$("cvFz"),ctxFz=cvFz.getContext("2d");
+const cvFa=$("cvFa"),ctxFa=cvFa.getContext("2d");
 const Ftip=$("Ftip");
 const FX0=152, FCW=7.7;                    // table grids: left offset, cell width
 // machine description: dials = list of term-lists; each term {f: freq index, phi, g}
@@ -691,6 +731,23 @@ function drawF(){
   const col=x=>Fcol(x,pr);
   const s=(a+b)%P;
   const psi=(f,x)=>TAU*freqs[f]*x/P;
+  // pinned corner readout — the answer token, ideal vs current coordinates
+  {
+    const fv=v=>(v<0?"−":"+")+Math.abs(v).toFixed(3);
+    const psiI=TAU*s/P, ci=[Math.cos(psiI),Math.sin(psiI)];
+    const cc=col(s);
+    const pegTxt=freqs.map(k=>`peg ${(k*s)%P}`).join(", ");
+    const radTxt=freqs.map(k=>((TAU*k*s/P)%TAU).toFixed(3)).join(", ")+" rad";
+    $("Freadout").innerHTML=
+      `<div class="lbl">answer</div>
+       <div class="ans">(${a}+${b}) mod 113 = ${s}</div>
+       <div class="lbl">ideal · k=1, φ=0</div>
+       <div>peg ${s} · ${psiI.toFixed(3)} rad</div>
+       <div>(${fv(ci[0])}, ${fv(ci[1])})</div>
+       <div class="lbl" style="margin-top:3px">current · k=${freqs.join(",")}</div>
+       <div>${pegTxt} · ${radTxt}</div>
+       <div>(${cc.map(fv).join(", ")})</div>`;
+  }
   const gnorm=Math.max(...dials.map(ts=>ts.reduce((s,t)=>s+t.g,0)));
   const dlab=d=>colld?`dial ${d+1} (chord)`:
     `dial ${d+1} k=${freqs[dials[d][0].f]} φ=${dials[d][0].phi.toFixed(2)}`;
@@ -704,24 +761,33 @@ function drawF(){
     const s2s=Z[0].reduce((s,c,d)=>cAdd(s,cMul(c,Z[1][d])),[0,0]);
     coll=Math.max(cAbs(s1),cAbs(s2s))/Math.sqrt((T[0]||1)*(T[1]||1));
   }
-  // ── ① one-hots + embedding table
-  const EY=d=>44+d*36, Ebot=EY(D-1)+26;
-  ctxFe.clearRect(0,0,1040,204);
+  // ── ① one-hots + embedding table (+ the type channel that feeds attention)
+  const EY=d=>42+d*34, Ebot=EY(D-1)+26;
+  const TY=EY(D)+8, Tbot=TY+22, EQX=FX0+P*FCW+10;
+  cvFe.height=Tbot+18;
+  ctxFe.clearRect(0,0,1040,cvFe.height);
   ctxFe.font="11px sans-serif"; ctxFe.fillStyle="#333";
   ctxFe.fillText("one-hot a",4,15); ctxFe.fillText("one-hot b",4,31);
   for(let d=0;d<D;d++){ ctxFe.fillStyle="#333"; ctxFe.fillText(dlab(d),4,EY(d)+17); }
+  ctxFe.fillStyle="#333"; ctxFe.fillText("type",4,TY+15);
   for(let x=0;x<P;x++){
     const X=FX0+x*FCW;
     ctxFe.fillStyle=(x===a)?"#1f77b4":"#e3e7f0"; ctxFe.fillRect(X,6,FCW-1.2,11);
     ctxFe.fillStyle=(x===b)?"#2ca02c":"#e3e7f0"; ctxFe.fillRect(X,22,FCW-1.2,11);
     const q=col(x);
     for(let d=0;d<D;d++) Fheat(ctxFe,q[d]/gnorm,X,EY(d),FCW-1.2,26);
+    Fheat(ctxFe,1,X,TY,FCW-1.2,22);                 // type = +1 for every number
   }
+  // the "=" token column: origin in the plane (no circle content), type −1
+  ctxFe.strokeStyle="#c9cfdd"; ctxFe.lineWidth=1;
+  for(let d=0;d<D;d++) ctxFe.strokeRect(EQX,EY(d),FCW-1.2,26);
+  Fheat(ctxFe,-1,EQX,TY,FCW-1.2,22);
+  ctxFe.fillStyle="#555"; ctxFe.fillText("“=”",EQX-3,Tbot+13);
   const outl=(x,cl)=>{ ctxFe.strokeStyle=cl; ctxFe.lineWidth=1.7;
-    ctxFe.strokeRect(FX0+x*FCW-1.4,EY(0)-2,FCW+1.4,Ebot-EY(0)+4); };
+    ctxFe.strokeRect(FX0+x*FCW-1.4,EY(0)-2,FCW+1.4,Tbot-EY(0)+2); };
   outl(a,"#1f77b4"); outl(b,"#2ca02c");
-  ctxFe.fillStyle="#8a93a6"; ctxFe.fillText("x=0",FX0,Ebot+14);
-  ctxFe.fillText("x=112",FX0+112*FCW-24,Ebot+14);
+  ctxFe.fillStyle="#8a93a6"; ctxFe.fillText("x=0",FX0,Tbot+13);
+  ctxFe.fillText("x=112",FX0+108*FCW,Tbot+13);
   // summoned columns — every term's subtraction shown before its cosine resolves
   const cell=(x,d)=>dials[d].map(t=>{
     const pm=psi(t.f,x)%TAU;
@@ -882,6 +948,7 @@ function drawF(){
    +`<br>this problem: machine says <b style='color:${good?"#1b7f3b":"#c22"}'>${am}</b>,
     truth (${a}+${b}) mod 113 = ${s} ${good?"✓":"✗"}<br>
     over all 113 possible sums: <b>${ok}/113 correct (${(100*ok/P).toFixed(1)}%)</b>`;
+  drawAtt();
 }
 function Fenforce(){
   if(!$("Fideal").checked) return;
@@ -892,8 +959,72 @@ function FidealUI(){
   const on=$("Fideal").checked;
   ["Fp2","Fg2","Fp4","Fg4"].forEach(id=>$(id).disabled=on);
 }
-["Fa","Fb","Fk","Fk2","Fp1","Fg1","Fp2","Fg2","Fp3","Fg3","Fp4","Fg4"]
+// ── ②a attention stage: matrices + fetch circle ──
+function fmt(v){return (v>=0?"+":"−")+Math.abs(v).toFixed(2);}
+function matHTML(title,M,o){ o=o||{};
+  let h=`<div><div class="mt">${title}</div><table class="fmat">`;
+  if(o.cl){ h+="<tr><td></td>"+o.cl.map(c=>`<th>${c}</th>`).join("")+"</tr>"; }
+  M.forEach((row,i)=>{ h+=`<tr${o.hl===i?" style='background:#fff3d6'":""}>`;
+    if(o.rl) h+=`<th>${o.rl[i]}</th>`;
+    h+=row.map(v=>`<td>${fmt(v)}</td>`).join("")+"</tr>"; });
+  return h+"</table></div>"; }
+function drawAtt(){
+  const pr=Fpars();
+  if(!$("Fatt").checked){ $("Fmats").innerHTML=""; ctxFa.clearRect(0,0,360,360);
+    $("Fainfo").innerHTML="<i>matrices hidden — tick “show the full matrices”.</i>"; return; }
+  if(pr.s2){ $("Fmats").innerHTML=""; ctxFa.clearRect(0,0,360,360);
+    $("Fainfo").innerHTML="<i>The attention stage is drawn for the single-frequency 3-dim toy — turn off “add second frequency”.</i>"; return; }
+  const gam=+$("Fgam").value/10; $("FgamV").textContent=gam.toFixed(1);
+  const a=pr.a, b=pr.b, s=(a+b)%P;
+  const ca=Fcol(a,pr), cb=Fcol(b,pr);
+  const res=[[ca[0],ca[1],1],[cb[0],cb[1],1],[0,0,-1]];
+  const WQ=[[0,0,0],[0,0,0],[0,0,-gam]], WK=[[0,0,0],[0,0,0],[0,0,1]], WV=[[1,0,0],[0,1,0],[0,0,0]];
+  const mul=(M,v)=>M.map(r=>r[0]*v[0]+r[1]*v[1]+r[2]*v[2]);
+  const Q=res.map(v=>mul(WQ,v)), K=res.map(v=>mul(WK,v)), V=res.map(v=>mul(WV,v));
+  const sc=Q.map(q=>K.map(k=>(q[0]*k[0]+q[1]*k[1]+q[2]*k[2])/Math.sqrt(3)));
+  const sm=sc.map(r=>{const m=Math.max(...r),e=r.map(x=>Math.exp(x-m)),z=e.reduce((p,q)=>p+q);return e.map(x=>x/z);});
+  const out=[0,1].map(d=>sm[2][0]*V[0][d]+sm[2][1]*V[1][d]+sm[2][2]*V[2][d]);
+  const RL=["a","b","="], PC=["x","y","t"];
+  $("Fmats").innerHTML=
+    matHTML("residual in (rows: a, b, =)",res,{rl:RL,cl:PC})
+   +matHTML("W_Q",WQ,{cl:PC})+matHTML("W_K",WK,{cl:PC})+matHTML("W_V",WV,{cl:PC})
+   +matHTML("Q = res·W_Qᵀ",Q,{rl:RL,cl:PC})+matHTML("K",K,{rl:RL,cl:PC})+matHTML("V",V,{rl:RL,cl:PC})
+   +matHTML("scores  q·k /√d",sc,{rl:RL,cl:RL,hl:2})
+   +matHTML("softmax (rows sum to 1)",sm,{rl:RL,cl:RL,hl:2});
+  // fetch circle
+  const cx=180,cy=180,R=125;
+  ctxFa.clearRect(0,0,360,360);
+  ctxFa.setLineDash([4,4]); ctxFa.strokeStyle="#c9cfdd";
+  ctxFa.beginPath(); ctxFa.arc(cx,cy,R,0,TAU); ctxFa.stroke(); ctxFa.setLineDash([]);
+  ctxFa.fillStyle="#dbe2ef";
+  for(let x=0;x<P;x++){ const q=Fcol(x,pr);
+    ctxFa.beginPath(); ctxFa.arc(cx+R*q[0],cy-R*q[1],1.3,0,TAU); ctxFa.fill(); }
+  const arrow=(q,col,w,rad)=>{ const X=cx+R*q[0], Y=cy-R*q[1];
+    ctxFa.strokeStyle=col; ctxFa.fillStyle=col; ctxFa.lineWidth=w;
+    ctxFa.beginPath(); ctxFa.moveTo(cx,cy); ctxFa.lineTo(X,Y); ctxFa.stroke();
+    ctxFa.beginPath(); ctxFa.arc(X,Y,rad,0,TAU); ctxFa.fill(); return [X,Y]; };
+  arrow(ca,"#1f77b4",1.6,4.5); arrow(cb,"#2ca02c",1.6,4.5);
+  const H=arrow(out,"#d62728",2.6,5.5);
+  ctxFa.fillStyle="#111"; ctxFa.font="12px sans-serif";
+  ctxFa.fillText(`½·a+½·b = (${fmt(out[0])}, ${fmt(out[1])})`, Math.min(H[0]+9,150), H[1]+ (out[1]>0?18:-9));
+  ctxFa.fillStyle="#1f77b4"; ctxFa.fillText("a", cx+R*ca[0]+7, cy-R*ca[1]);
+  ctxFa.fillStyle="#2ca02c"; ctxFa.fillText("b", cx+R*cb[0]+7, cy-R*cb[1]);
+  const mu=Math.atan2(out[1],out[0]);
+  $("Fainfo").innerHTML=
+   `“=” query = W_Q·(0,0,−1) = <b>(0, 0, +${gam.toFixed(1)})</b> — frozen, seeks +type.<br>
+    “=” scores: a <b>+${sc[2][0].toFixed(2)}</b>, b <b>+${sc[2][1].toFixed(2)}</b>,
+    self <b>${sc[2][2].toFixed(2)}</b> → softmax
+    <b>(${sm[2][0].toFixed(3)}, ${sm[2][1].toFixed(3)}, ${sm[2][2].toFixed(3)})</b>.<br>
+    value average = ½·col<sub>${a}</sub> + ½·col<sub>${b}</sub> =
+    <b>(${fmt(out[0])}, ${fmt(out[1])})</b> — the half-angle point (red), sitting at the
+    <b>midpoint direction μ</b> of a and b, radius shrunk to |cos(Δ/2)| =
+    <b>${Math.hypot(out[0],out[1]).toFixed(3)}</b>.<br>
+    “=” walks out with (${fmt(out[0])}, ${fmt(out[1])}, −1). The MLP will <b>double</b> this
+    angle (2μ) to reach col<sub>${s}</sub> — the readout for (${a}+${b}) mod 113 = ${s}.`;
+}
+["Fa","Fb","Fk","Fk2","Fp1","Fg1","Fp2","Fg2","Fp3","Fg3","Fp4","Fg4","Fgam"]
   .forEach(id=>$(id).addEventListener("input",()=>{Fenforce();drawF();}));
+$("Fatt").addEventListener("change",drawF);
 $("Fideal").addEventListener("change",()=>{FidealUI();Fenforce();drawF();});
 $("Fs2").addEventListener("change",()=>{
   $("Fs2ctl").style.display=$("Fs2").checked?"inline":"none"; Fenforce(); drawF(); });
@@ -917,13 +1048,22 @@ function FcellTip(x,d,pr,isRow){
            :`<br>carved in at training time, looked up at runtime`);
 }
 cvFe.addEventListener("mousemove",e=>{
-  const x=Math.floor((e.offsetX-FX0)/FCW), pr=Fpars();
+  const pr=Fpars(), D=pr.D, TY=42+D*34+8, EQX=FX0+P*FCW+10;
+  if(e.offsetX>=EQX-3 && e.offsetX<EQX+FCW){
+    FtipShow(`the “=” token — sits at the plane <b>origin</b> (no circle content) and carries
+      type <b>−1</b>. Every number carries +1; the attention query seeks +type, so “=”
+      down-weights itself to ~0.`,e); return; }
+  const x=Math.floor((e.offsetX-FX0)/FCW);
   if(x<0||x>=P){Ftip.style.display="none";return;}
   if(e.offsetY<38){
     FtipShow(`token ${x} — a 1 in slot ${x}, zeros elsewhere. Multiplying E by this
       one-hot <i>selects column ${x}</i>: that is the whole embedding step.`,e); return; }
-  const d=Math.floor((e.offsetY-42)/36);
-  if(d<0||d>=pr.D){Ftip.style.display="none";return;}
+  if(e.offsetY>=TY){
+    FtipShow(`type[token ${x}] = <b>+1</b> — every number is an operand. The lone −1 is “=”.
+      This is the channel attention reads to fetch operands, blind to which number they are.
+      Ignored by the circle plots and the decode.`,e); return; }
+  const d=Math.floor((e.offsetY-42)/34);
+  if(d<0||d>=D){Ftip.style.display="none";return;}
   FtipShow(FcellTip(x,d,pr,false),e);
 });
 cvFu.addEventListener("mousemove",e=>{

@@ -45,6 +45,41 @@ ENS = ROOT / "ens_runs"
 N_KEYS = 6
 
 
+MODE_CSS = """
+.modemenu{position:sticky;top:0;z-index:50;display:flex;gap:6px;flex-wrap:nowrap;
+  overflow-x:auto;background:#141a26;padding:9px 12px}
+.modebtn{font-size:13px;padding:7px 13px;border-radius:9px;border:1px solid #2c3547;
+  background:#1c2536;color:#9fb0c9;cursor:pointer;font-weight:600;white-space:nowrap}
+.modebtn:hover{background:#243049;color:#cdd8ea}
+.modebtn.active{background:#3a5bd0;color:#fff;border-color:#3a5bd0}
+.mode{display:none}
+"""
+
+ARITHMETIC_CARD = """
+<div class="card"><h2>Modular addition, the way you'd do it by hand</h2>
+<p class="sub">The whole task, before any network: (a + b) mod 113. It's clock arithmetic
+on a 113-hour clock — add the two numbers, and if you pass 113, subtract one full turn.
+That's it. Every later view (the circle algorithm, the toy transformer, the trained
+network) is just a different machine computing this same answer. Pick a and b:</p>
+<div class="ctl">a <input type="range" id="M0a" min="0" max="112" value="81"><span class="val" id="M0aV">81</span>
+ &nbsp; b <input type="range" id="M0b" min="0" max="112" value="41"><span class="val" id="M0bV">41</span></div>
+<div id="M0out" style="font-family:ui-monospace,Menlo,monospace;font-size:15px;
+  line-height:2.1;margin-top:10px"></div>
+</div>
+<script>(function(){
+  const $=id=>document.getElementById(id);
+  function draw(){ const a=+$('M0a').value,b=+$('M0b').value,s=a+b,m=s%113;
+    $('M0aV').textContent=a; $('M0bV').textContent=b;
+    $('M0out').innerHTML = (s<113)
+      ? `${a} + ${b} = <b>${s}</b> &nbsp; — under 113, so no wrap. &nbsp; (${a} + ${b}) mod 113 = <b style="color:#1b7f3b">${m}</b>.`
+      : `${a} + ${b} = <b>${s}</b> &nbsp; — that's ≥ 113, so subtract one full turn:<br>` +
+        `${s} − 113 = <b>${m}</b>. &nbsp; (${a} + ${b}) mod 113 = <b style="color:#1b7f3b">${m}</b>.`;
+  }
+  ['M0a','M0b'].forEach(id=>$(id).addEventListener('input',draw)); draw();
+})();</script>
+"""
+
+
 def b64(arr: np.ndarray) -> str:
     return base64.b64encode(arr.tobytes()).decode()
 
@@ -277,10 +312,17 @@ def main() -> int:
     docs = ROOT / "docs"
     docs.mkdir(exist_ok=True)
 
-    # ── ideal-algorithm explainer, inlined ───────────────────────────────────
+    # ── ideal-algorithm explainer, inlined and split into its six panels ──────
     exp = (ROOT / "circle_algorithm.html").read_text()
     exp_style = exp.split("<style>")[1].split("</style>")[0]
     exp_body = exp.split("</header>")[1].split("</body>")[0]
+    # separate the shared panel script from the panel markup
+    exp_markup, panel_script = exp_body.split("<script>", 1)
+    panel_script = panel_script.rsplit("</script>", 1)[0]
+    exp_inner = exp_markup.split('<div class="wrap">', 1)[1].rsplit("</div>", 1)[0]
+    _panels = [c.strip() for c in re.split(r"<!-- ═+ PANEL [A-F] ═+ -->", exp_inner) if c.strip()]
+    assert len(_panels) == 6, f"expected 6 circle panels, found {len(_panels)}"
+    PAN1, PAN2, PAN3, PAN4, PAN5, PAN6 = _panels
 
     seed_dirs = sorted((p for p in ENS.glob("seed_*") if (p / "metrics.csv").exists()),
                        key=lambda p: int(p.name.split("_")[1]))
@@ -293,33 +335,19 @@ def main() -> int:
     real_html = build_real_model()
 
     # Rent-knob section — needs the wd_runs clean grid; skip gracefully without it.
-    knob_html, knob_nav = "", ""
+    knob_html = ""
     if (ROOT / "wd_runs" / "clean_grid_summary.json").exists():
         from wd_knob import build_section as build_knob
         knob_html = build_knob()
-        knob_nav = "<a href='#knob'>Rent knob</a>"
         print("rent-knob section baked")
 
     gloss = "".join(f"<dt>{t}</dt><dd>{b}</dd>" for t, b in GLOSSARY)
     import plotly.offline as po
 
-    html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>GrokkingMetrics — a grokked transformer, instrumented and explained</title>
-<style>{CSS}{exp_style}</style>
-<script>{po.get_plotlyjs()}</script></head><body>
-<header><h1>GrokkingMetrics</h1>
-<p>A one-layer transformer learns modular addition, grokks, and gets caught in the act.
-Trained and instrumented from scratch in <a href='https://github.com/benmeyersUSC/TTNN'
-style='color:#9fc0ff'>TTTN</a> (a header-only C++20 ML library): movement metrics,
-crystallization spectra, leverage geometry — and the circle algorithm the network
-actually learns, taught interactively and then demonstrated live by the trained model.
-Grok steps across 10 seeds: {min(groks)}–{max(groks)} (canonical run: {int(v3_grok)}).</p>
-</header>
-<nav><a href='#ideal'>The algorithm</a><a href='#real'>The real model</a>
-<a href='#ens'>Ensemble</a>{knob_nav}<a href='#v3'>Instrumented run</a><a href='#gloss'>Glossary</a></nav>
-<div class='wrap'>
-
+    # ── the three modes ──────────────────────────────────────────────────────
+    mode_paper = ARITHMETIC_CARD + PAN1 + PAN2 + PAN5
+    mode_toy = PAN6
+    mode_real = f"""
 <div class='card'><h2>What happened here</h2>
 <p class='sub'>Modular addition, (a + b) mod 113, trained on 30% of all pairs with heavy
 weight decay. The network first memorizes (train accuracy → 100%, validation near
@@ -330,33 +358,79 @@ onto a handful of Fourier frequencies, the embedding and unembedding matrices ag
 those frequencies <i>before</i> the accuracy moves, and functional leverage concentrates
 onto a small circuit of parameters. The algorithm being formed is geometric: numbers
 become points on circles, addition becomes rotation, and answers are read off by
-interference. Sections below: learn the algorithm, watch the trained model run it,
-then see the training dynamics that produced it.</p></div>
-
-<div id='ideal'>{exp_body}</div>
-
+interference.</p></div>
 {real_html}
-
 <div class='card' id='ens'><h2>Ensemble — 10 seeds, mean ± 1σ</h2>
 <p class='sub'>Left: raw training step. Right: grok-aligned — each run shifted so its own
 grok moment (peak validation-accuracy slope) sits at τ = 0. Alignment is per-run, which
 is why the transition stays sharp despite grok steps spanning {min(groks)}–{max(groks)}.</p>
 {ens_html}</div>
-
 {knob_html}
-
 <div class='card' id='v3'><h2>The instrumented run</h2>
 <p class='sub'>The canonical seed with the full instrument suite: crystallization and
 emergence, the embedding/unembedding spectral handshake, and leverage — realized
 per-parameter influence against the architecture's structural prior.</p>
 {v3_html}</div>
+<p class='sub' style='margin-top:6px'>The two Fourier tools below are how the frequencies
+were <i>found</i> in these trained matrices, and why several of them make the logits sharp
+— the analysis lens for everything above.</p>
+{PAN3}
+{PAN4}"""
+
+    html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>GrokkingMetrics — a grokked transformer, instrumented and explained</title>
+<style>{CSS}{exp_style}{MODE_CSS}</style>
+<script>{po.get_plotlyjs()}</script></head><body>
+<header><h1>GrokkingMetrics</h1>
+<p>A one-layer transformer learns modular addition, grokks, and gets caught in the act.
+Trained and instrumented from scratch in <a href='https://github.com/benmeyersUSC/TTNN'
+style='color:#9fc0ff'>TTTN</a> (a header-only C++20 ML library). Three views, same task:
+the algorithm on paper, an idealized toy transformer you tune by hand, and the real
+trained network with its full instrument suite. Grok steps across 10 seeds:
+{min(groks)}–{max(groks)} (canonical run: {int(v3_grok)}).</p>
+</header>
+<div class='modemenu'>
+  <button class='modebtn' data-mode='paper'>① Modular Addition — on paper &amp; on a circle</button>
+  <button class='modebtn' data-mode='toy'>② Neural Modular Addition — the idealized toy model</button>
+  <button class='modebtn' data-mode='real'>③ TTTN-Grokked Modular Transformer — the trained torus</button>
+</div>
+<div class='wrap'>
+<div class='mode' id='mode-paper'>{mode_paper}</div>
+<div class='mode' id='mode-toy'>{mode_toy}</div>
+<div class='mode' id='mode-real'>{mode_real}</div>
 
 <div class='card' id='gloss'><h2>Glossary</h2><dl class='gloss'>{gloss}</dl></div>
-
 <p style='color:#888;font-size:12.5px;text-align:center'>Built from scratch:
 <a href='https://github.com/benmeyersUSC/TTNN'>TTTN</a> ·
 <a href='https://github.com/benmeyersUSC/GrokkingMetrics'>GrokkingMetrics</a></p>
-</div></body></html>"""
+</div>
+<script>{panel_script}</script>
+<script>
+(function(){{
+  const modes={{paper:document.getElementById('mode-paper'),
+               toy:document.getElementById('mode-toy'),
+               real:document.getElementById('mode-real')}};
+  const btns=[...document.querySelectorAll('.modebtn')];
+  function show(m){{ if(!modes[m]) m='paper';
+    for(const k in modes) modes[k].style.display=(k===m)?'block':'none';
+    btns.forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+    // hash prefixed so it can't collide with any in-page element id (e.g. #real)
+    history.replaceState(null,'','#view-'+m);
+    window.scrollTo(0,0);
+    requestAnimationFrame(()=>{{
+      modes[m].querySelectorAll('.plotly-graph-div').forEach(d=>{{
+        try{{ if(window.Plotly) Plotly.Plots.resize(d); }}catch(e){{}} }});
+      window.dispatchEvent(new Event('resize'));
+      window.scrollTo(0,0);
+    }});
+  }}
+  btns.forEach(b=>b.addEventListener('click',()=>show(b.dataset.mode)));
+  const h=(location.hash||'').replace('#view-','');
+  show(modes[h]?h:'paper');
+}})();
+</script>
+</body></html>"""
 
     out = docs / "index.html"
     out.write_text(html)
