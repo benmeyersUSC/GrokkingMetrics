@@ -290,11 +290,13 @@ can't un-shear — it drifts off. Slide φ and α and watch.</p>
 killed by ReLU)</div></div>
 <div style="flex:1;min-width:360px">
 <canvas id="cvMbars" width="520" height="200"></canvas>
-<div class="legend">per neuron: preactivation zⱼ = cos(μ−ψⱼ) and hⱼ = ReLU(zⱼ)</div></div></div>
+<div class="legend">per neuron: pre-activation zⱼ = wⱼ·input and hⱼ = ReLU(zⱼ)</div></div></div>
+<div id="Mneurons" class="anat" style="overflow-x:auto;margin-top:8px"></div>
 <h4 style="font-size:14px;margin-top:14px">the network's output as the input angle sweeps — it traces cos(2φ), double the frequency</h4>
-<canvas id="cvMcurve" width="1040" height="220"></canvas>
-<div class="legend">solid blue = out_x(φ) = 3π/5·Σⱼcos2ψⱼ·ReLU(cos(φ−ψⱼ)) · dashed = ideal cos(2φ)
-· faint = cos(φ) for contrast · vertical line = your current μ</div>
+<canvas id="cvMcurve" width="1040" height="242"></canvas>
+<div class="legend"><b>y-axis</b> = out_x, the x-coordinate of the MLP output (unit input), range −1…+1 ·
+<b>x-axis</b> = input angle φ in radians (0…2π) · solid blue = 3π/5·Σⱼcos2ψⱼ·ReLU(cos(φ−ψⱼ))
+· dashed = ideal cos(2φ) · faint = cos(φ) for contrast · red line = your current β</div>
 <div id="Mcancel" class="anat" style="margin-top:12px"></div>
 <div class="row" style="margin-top:12px"><div>
 <canvas id="cvMout" width="330" height="330"></canvas>
@@ -302,25 +304,15 @@ killed by ReLU)</div></div>
 landing on the answer's peg col<sub>c</sub> (hollow)</div></div>
 <div class="legend" id="Minfo" style="flex:1;min-width:320px;font-size:12.5px;line-height:1.95"></div></div>
 
-<div class="row" style="margin-top:12px"><div>
-<h4>② the dossier plane — circle, or ellipse</h4>
-<canvas id="cvF" width="430" height="430"></canvas>
-<div class="legend"><span class="dot" style="background:#1f77b4"></span>dossier(a) &nbsp;
-<span class="dot" style="background:#2ca02c"></span>dossier(b) &nbsp;
-<span class="dot" style="background:#d62728"></span>readout = dossier(a+b) &nbsp;·&nbsp;
-dashed grey = unit circle</div>
-</div><div style="flex:1;min-width:420px">
-<h4>③ the readout — assumed perfect, for now</h4>
-<div class="legend" id="Fread" style="font-size:13px;line-height:1.95"></div>
-</div></div>
-
-<h4>④ the unembedding table Wᵁ (113 candidate rows × <span id="FuT">2 dials</span>,
-drawn transposed) — the readout is dotted against every one</h4>
+<h4>③ the readout → dotted against every candidate row</h4>
+<div class="legend" id="Fread" style="font-size:13px;line-height:1.95;margin-bottom:10px"></div>
+<h4 style="font-size:14px;margin-top:4px">the unembedding table Wᵁ (113 candidate rows ×
+<span id="FuT">2 dials</span>, drawn transposed)</h4>
 <canvas id="cvFu" width="1040" height="176"></canvas>
 <div class="legend">solid red outline: the machine's argmax · dashed black outline:
 the truth, when they disagree · hover any cell</div>
 
-<h4>⑤ 113 dot products → logits → argmax</h4>
+<h4>④ 113 dot products → logits → argmax</h4>
 <canvas id="cvFl" width="1040" height="240"></canvas>
 <div class="legend" id="Finfo" style="font-size:12.5px;line-height:1.8"></div>
 </div>
@@ -714,7 +706,7 @@ $("Erun").onclick=ErunAnim;
 ErebuildCircles(); drawE(1,1,1);
 
 /* ───────── Panel F ───────── */
-const cvF=$("cvF"),ctxF=cvF.getContext("2d"),cvFl=$("cvFl"),ctxFl=cvFl.getContext("2d");
+const cvFl=$("cvFl"),ctxFl=cvFl.getContext("2d");
 const cvFe=$("cvFe"),ctxFe=cvFe.getContext("2d"),cvFu=$("cvFu"),ctxFu=cvFu.getContext("2d");
 const cvFz=$("cvFz"),ctxFz=cvFz.getContext("2d");
 const cvFa=$("cvFa"),ctxFa=cvFa.getContext("2d");
@@ -883,46 +875,16 @@ function drawF(){
     ctxFz.fillText(`${dg.lab} = ${dg.val.toFixed(3)} ${dg.val<0.02?"— loop closed ✓":"— loop open ✗"}`,cx,144);
     ctxFz.textAlign="start";
   });
-  // ── ② dossier plane(s)
-  ctxF.clearRect(0,0,430,430);
-  ctxF.font="11px sans-serif";
+  // ── ③ the readout: the MLP output above IS col_c; now dot it against every row
   const qs=col(s);
-  const panel=(cx,cy,sc,dx,dy,label)=>{
-    ctxF.strokeStyle="#e3e7f0";
-    ctxF.beginPath();ctxF.moveTo(cx-sc*1.45,cy);ctxF.lineTo(cx+sc*1.45,cy);ctxF.stroke();
-    ctxF.beginPath();ctxF.moveTo(cx,cy-sc*1.45);ctxF.lineTo(cx,cy+sc*1.45);ctxF.stroke();
-    ctxF.setLineDash([4,4]); ctxF.strokeStyle="#c9cfdd";
-    ctxF.beginPath(); ctxF.arc(cx,cy,sc,0,TAU); ctxF.stroke(); ctxF.setLineDash([]);
-    ctxF.strokeStyle="rgba(120,150,220,0.30)"; ctxF.lineWidth=0.7; ctxF.beginPath();
-    for(let x=0;x<=P;x++){ const q=col(x%P);
-      const X=cx+sc*q[dx], Y=cy-sc*q[dy]; x?ctxF.lineTo(X,Y):ctxF.moveTo(X,Y); }
-    ctxF.stroke();
-    ctxF.fillStyle="#aab8d6";
-    for(let x=0;x<P;x++){ const q=col(x);
-      ctxF.beginPath(); ctxF.arc(cx+sc*q[dx],cy-sc*q[dy],1.6,0,TAU); ctxF.fill(); }
-    const mark=(x,cl,r)=>{ const q=col(x);
-      ctxF.fillStyle=cl; ctxF.beginPath(); ctxF.arc(cx+sc*q[dx],cy-sc*q[dy],r,0,TAU); ctxF.fill(); };
-    mark(a,"#1f77b4",5); mark(b,"#2ca02c",5); mark(s,"#d62728",6);
-    ctxF.fillStyle="#8a93a6"; ctxF.fillText(label, cx-sc*1.4, cy-sc*1.45+11);
-  };
-  if(!s2 || colld){ panel(215,215,140,0,1,colld?"both notes, dials 1–2 (collided)":"dials 1–2");
-    ctxF.fillStyle="#111"; ctxF.font="12px sans-serif";
-    ctxF.fillText(`(${qs[0].toFixed(2)}, ${qs[1].toFixed(2)})`,215+140*qs[0]+9,215-140*qs[1]-8);
-  } else {
-    panel(110,215,62,0,1,`plane 1 · k=${freqs[0]} (dials 1,2)`);
-    panel(320,215,62,2,3,`plane 2 · k=${freqs[1]} (dials 3,4)`);
-  }
-  // ── ③ readout narration
-  const ca=col(a), cb=col(b);
   const vec=q=>"("+q.map(f3v).join(", ")+")";
   $("Fread").innerHTML=
-   `col<sub>a=${a}</sub> = ${vec(ca)}<br>col<sub>b=${b}</sub> = ${vec(cb)}<br>
-    <b>attention</b> (Act 2) fetches both columns into the “=” slot — transport, no math.<br>
-    <b>MLP</b> (Act 3) performs the angle addition${s2?" on every circle at once":""}.
-    The result is exactly the column that c = (${a}+${b}) mod 113 = ${s} would own:<br>
-    <b>readout = col<sub>${s}</sub> = ${vec(qs)}</b> — stored-style numbers;
-    no angle, no arctan, no φ anywhere at runtime.`;
-  // ── ④ unembedding table + argmax outline
+   `The MLP's output above <b>is</b> the readout: <b>col<sub>${s}</sub> = ${vec(qs)}</b> —
+    stored-style numbers, no angle or φ at runtime. It knows nothing about c; it's just the
+    doubled point. Now it's dotted against all 113 <b>frozen candidate rows</b> below — each
+    candidate c owns the dossier it <i>would</i> have — and logit(c) = readout · row<sub>c</sub>
+    spikes where the angles line up.`;
+  // ── the unembedding table + argmax outline
   const W=[]; for(let c=0;c<P;c++) W.push(col(c));
   const dot=(u,v)=>u.reduce((s,x,i)=>s+x*v[i],0);
   const lg=W.map(q=>dot(q,qs));
@@ -1111,35 +1073,75 @@ function drawMLP(){
     }
     ctxMb.fillStyle="#8a93a6"; ctxMb.fillText("light = zⱼ (pre-act, signed)   solid = hⱼ = ReLU(zⱼ)",40,18);
   })();
-  // ── doubling curve: the fixed doubler's transfer (unit input → cos2φ), current β marked ──
-  (function(){ ctxMc.clearRect(0,0,1040,220);
-    const X=p=>20+1000*p/TAU, Y=v=>110-92*v;
-    ctxMc.strokeStyle="#e3e7f0"; ctxMc.beginPath(); ctxMc.moveTo(20,110); ctxMc.lineTo(1020,110); ctxMc.stroke();
-    ctxMc.strokeStyle="rgba(120,150,220,0.30)"; ctxMc.lineWidth=1; ctxMc.beginPath();
+  // ── doubling curve: the fixed doubler's transfer (unit input → cos2φ), explicit axes ──
+  (function(){ ctxMc.clearRect(0,0,1040,242);
+    const X=p=>64+948*p/TAU, Y=v=>112-84*v;
+    ctxMc.font="10px sans-serif";
+    // y-axis gridlines + value labels
+    ctxMc.textAlign="right";
+    [[1,"+1"],[0.5,"+0.5"],[0,"0"],[-0.5,"−0.5"],[-1,"−1"]].forEach(([v,lb])=>{
+      ctxMc.strokeStyle=v===0?"#cdd6e6":"#eef1f6"; ctxMc.beginPath();
+      ctxMc.moveTo(60,Y(v)); ctxMc.lineTo(1016,Y(v)); ctxMc.stroke();
+      ctxMc.fillStyle="#8a93a6"; ctxMc.fillText(lb,56,Y(v)+3); });
+    ctxMc.textAlign="center";
+    // x-axis ticks + labels
+    [[0,"0"],[Math.PI/2,"π/2"],[Math.PI,"π"],[3*Math.PI/2,"3π/2"],[TAU,"2π"]].forEach(([p,lb])=>{
+      ctxMc.strokeStyle="#eef1f6"; ctxMc.beginPath(); ctxMc.moveTo(X(p),14); ctxMc.lineTo(X(p),200); ctxMc.stroke();
+      ctxMc.fillStyle="#8a93a6"; ctxMc.fillText(lb,X(p),216); });
+    // curves
+    ctxMc.strokeStyle="rgba(120,150,220,0.35)"; ctxMc.lineWidth=1; ctxMc.beginPath();
     for(let i=0;i<=400;i++){ const p=TAU*i/400; i?ctxMc.lineTo(X(p),Y(Math.cos(p))):ctxMc.moveTo(X(p),Y(Math.cos(p))); } ctxMc.stroke();
     ctxMc.strokeStyle="#c9cfdd"; ctxMc.setLineDash([4,4]); ctxMc.lineWidth=1.3; ctxMc.beginPath();
     for(let i=0;i<=400;i++){ const p=TAU*i/400; i?ctxMc.lineTo(X(p),Y(Math.cos(2*p))):ctxMc.moveTo(X(p),Y(Math.cos(2*p))); } ctxMc.stroke(); ctxMc.setLineDash([]);
     ctxMc.strokeStyle="#1f77b4"; ctxMc.lineWidth=1.9; ctxMc.beginPath();
     for(let i=0;i<=400;i++){ const p=TAU*i/400, v=mlpOutXY(p)[0]; i?ctxMc.lineTo(X(p),Y(v)):ctxMc.moveTo(X(p),Y(v)); } ctxMc.stroke();
+    // current β marker + its value
     ctxMc.strokeStyle="#d62728"; ctxMc.setLineDash([3,3]); ctxMc.beginPath();
-    ctxMc.moveTo(X(beta),8); ctxMc.lineTo(X(beta),212); ctxMc.stroke(); ctxMc.setLineDash([]);
-    ctxMc.fillStyle="#d62728"; ctxMc.beginPath(); ctxMc.arc(X(beta),Y(mlpOutXY(beta)[0]),4.5,0,TAU); ctxMc.fill();
-    ctxMc.fillStyle="#8a93a6"; ctxMc.font="10px sans-serif";
-    ctxMc.fillText("φ=0",18,124); ctxMc.fillText("φ=2π",990,124); ctxMc.fillText("β",X(beta)+4,20);
+    ctxMc.moveTo(X(beta),14); ctxMc.lineTo(X(beta),200); ctxMc.stroke(); ctxMc.setLineDash([]);
+    const bv=mlpOutXY(beta)[0];
+    ctxMc.fillStyle="#d62728"; ctxMc.beginPath(); ctxMc.arc(X(beta),Y(bv),4.5,0,TAU); ctxMc.fill();
+    ctxMc.textAlign="left"; ctxMc.fillText(`β=${beta.toFixed(2)}, out_x=${bv.toFixed(2)}`,X(beta)+6,22);
+    // axis titles
+    ctxMc.fillStyle="#555"; ctxMc.font="11px sans-serif";
+    ctxMc.textAlign="center"; ctxMc.fillText("input angle φ  (radians)",540,236);
+    ctxMc.save(); ctxMc.translate(15,112); ctxMc.rotate(-Math.PI/2);
+    ctxMc.fillText("out_x",0,0); ctxMc.restore(); ctxMc.textAlign="left";
   })();
-  // ── cancellation algebra, live (β = the actual input's dial-angle) ──
-  let Sc=0, Sf=0, So=0;
-  for(let j=0;j<MLPN;j++){ Sc+=Math.cos(2*MLPpsi[j]+phi0);
-    Sf+=Math.cos(2*MLPpsi[j]+phi0)*Math.cos(beta-MLPpsi[j]);
-    So+=Math.cos(2*MLPpsi[j]+phi0)*Math.cos(2*beta-2*MLPpsi[j]); }
+  // ── per-neuron computation table: every angle, weight, dot product, contribution ──
+  const fp=v=>(v<0?"−":"+")+Math.abs(v).toFixed(2);
+  const ow=MLPpsi.map(ps=>[Math.cos(2*ps+phi0), Math.sin(2*ps+phi0)]);
+  let nr="";
+  for(let j=0;j<MLPN;j++){ const cw=Math.cos(MLPpsi[j]), sw=Math.sin(MLPpsi[j]);
+    nr+=`<tr><td>n${j}</td><td>${(MLPpsi[j]*180/Math.PI).toFixed(0)}°</td>
+      <td>(${fp(cw)}, ${fp(sw)})</td>
+      <td>(${fp(cw)})(${fp(inp[0])}) (${fp(sw)})(${fp(inp[1])}) = <b>${z[j].toFixed(3)}</b></td>
+      <td>${h[j]>1e-9?`<b style="color:#1b7f3b">${h[j].toFixed(3)}</b>`:"0"}</td>
+      <td>(${fp(ow[j][0])}, ${fp(ow[j][1])})</td>
+      <td>(${(h[j]*ow[j][0]).toFixed(3)}, ${(h[j]*ow[j][1]).toFixed(3)})</td></tr>`; }
+  $("Mneurons").innerHTML=`<table><tr>
+    <th>j</th><th>ψⱼ</th><th>wⱼ=(cosψⱼ,sinψⱼ)</th><th>zⱼ = wⱼ·input = cosψⱼ·X + sinψⱼ·Y</th>
+    <th>hⱼ=ReLU</th><th>out-wt=(cos,sin)(2ψⱼ+φ₁)</th><th>hⱼ·(out-wt)</th></tr>${nr}
+    <tr><td colspan="6" style="text-align:right">Σⱼ hⱼ·(out-wt) =</td><td><b>(${oxr.toFixed(3)}, ${oyr.toFixed(3)})</b></td></tr>
+    <tr><td colspan="6" style="text-align:right">× 3π/5 → <b>output</b> =</td><td><b>(${(MLPsc*oxr).toFixed(3)}, ${(MLPsc*oyr).toFixed(3)})</b></td></tr></table>
+    <div style="font-size:11px;color:#8a93a6;margin-top:2px">input = (X, Y) = (${inp[0].toFixed(3)}, ${inp[1].toFixed(3)})</div>`;
+  // ── why only the octave survives: Σⱼcos(m·ψⱼ)=0 unless m is a multiple of 5 ──
+  let Sc=0, Sf=0, So=0; const cterm=[];
+  for(let j=0;j<MLPN;j++){ const t=Math.cos(2*MLPpsi[j]+phi0);
+    cterm.push(t); Sc+=t;
+    Sf+=t*Math.cos(beta-MLPpsi[j]);
+    So+=t*Math.cos(2*beta-2*MLPpsi[j]); }
   const red=v=>`<span style="color:#c22">${v}</span>`, grn=v=>`<span style="color:#1b7f3b">${v}</span>`;
   $("Mcancel").innerHTML=
-   `<div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:2">
-    out_x = Σⱼ cos(2ψⱼ+φ₁)·hⱼ , &nbsp; hⱼ ∝ 1/π + ½cos(β−ψⱼ) + (2/3π)cos(2β−2ψⱼ) + … &nbsp;(β = ${beta.toFixed(3)}; output phase-locked by φ₁ = ${phi0.toFixed(3)})<br>
-    ${red("constant:")} &nbsp;&nbsp;(1/π)·Σⱼcos(2ψⱼ+φ₁) &nbsp;= (1/π)·${red(Sc.toFixed(3))} = ${red("0")}<br>
-    ${red("fundamental:")} (½)·Σⱼcos(2ψⱼ+φ₁)·cos(β−ψⱼ) = (½)·${red(Sf.toFixed(3))} = ${red("0")}<br>
-    ${grn("octave:")} &nbsp;&nbsp;&nbsp;(2/3π)·Σⱼcos(2ψⱼ+φ₁)·cos(2β−2ψⱼ) = (2/3π)·${grn(So.toFixed(3))} = ${grn(((2/(3*Math.PI))*So).toFixed(3))} &nbsp;= (5/3π)·cos(2β+φ₁)<br>
-    → output points at ${grn("angle 2β+φ₁")} &nbsp;(the doubled term, rotated into the embedding's frame — hits col_c only if the input was a true circle point)
+   `<div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.95">
+    <b>WHY the output points at 2β</b> — substitute hⱼ = 1/π + ½cos(β−ψⱼ) + (2/3π)cos(2β−2ψⱼ) + … into
+    out_x = Σⱼcos(2ψⱼ+φ₁)·hⱼ. Each piece is a sum Σⱼcos(m·ψⱼ + const), and
+    ${grn("Σⱼcos(m·ψⱼ) = 0 unless m is a multiple of 5")} (your Desmos plot; N=5 here):<br>
+    ${red("constant")} → freq <b>m=2</b>: Σⱼcos(2ψⱼ+φ₁) = ${cterm.map(v=>fp(v)).join(" ")} = ${red(Sc.toFixed(3))} &nbsp;→ dies (2 ≠ 5·k)<br>
+    ${red("fundamental")} → the product splits into <b>m=1</b> and <b>m=3</b>: Σ = ${red(Sf.toFixed(3))} &nbsp;→ dies<br>
+    ${grn("octave")} → the out-weight's 2ψⱼ cancels the harmonic's 2ψⱼ, leaving <b>m=0</b> (no ψⱼ at all):
+      Σⱼcos(0) = 5, the ${grn("resonance")} → (2/3π)·${grn(So.toFixed(3))} = ${grn(((2/(3*Math.PI))*So).toFixed(3))} = (5/3π)cos(2β+φ₁)<br>
+    <b>m=0 is the only multiple of 5 any term reaches</b> — that's the whole doubling. (the ~1° miss is n=8's
+    m=10, the next resonance up, that 5 neurons can't cancel.)
    </div>`;
   // ── output plane: the real dossier locus (ellipse if cursed) + col_c + MLP output ──
   (function(){ const cx=165,cy=165,R=110;
@@ -1151,13 +1153,23 @@ function drawMLP(){
     ctxMo.stroke();
     ctxMo.strokeStyle="#d62728"; ctxMo.lineWidth=1.7;               // col_c hollow (target)
     ctxMo.beginPath(); ctxMo.arc(cx+R*colc[0],cy-R*colc[1],8,0,TAU); ctxMo.stroke();
-    const px=cx+R*rc*Math.cos(oang), py=cy-R*rc*Math.sin(oang);      // MLP output, at col_c's radius
+    const mx=rc*Math.cos(oang), my=rc*Math.sin(oang);               // MLP output coords (at col_c's radius)
+    const px=cx+R*mx, py=cy-R*my;
     ctxMo.strokeStyle="#111"; ctxMo.lineWidth=1.9; ctxMo.setLineDash(miss>5?[5,3]:[]);
     ctxMo.beginPath(); ctxMo.moveTo(cx,cy); ctxMo.lineTo(px,py); ctxMo.stroke(); ctxMo.setLineDash([]);
     ctxMo.fillStyle=miss<5?"#1b7f3b":"#c22"; ctxMo.beginPath(); ctxMo.arc(px,py,5,0,TAU); ctxMo.fill();
-    ctxMo.fillStyle="#111"; ctxMo.font="11px sans-serif";
-    ctxMo.fillText("MLP out", Math.min(px+7,250), py+(py<cy?-4:14));
-    ctxMo.fillStyle="#c22"; ctxMo.fillText("col_"+c, Math.min(cx+R*colc[0]+10,250), cy-R*colc[1]+4);
+    ctxMo.font="11px sans-serif";
+    if(miss<5){   // landed — one combined label
+      ctxMo.fillStyle="#1b7f3b";
+      ctxMo.fillText(`MLP out = col_${c} (${mx.toFixed(2)}, ${my.toFixed(2)}) ✓`,
+        Math.min(px+9,110), py+(my>0?-7:17));
+    } else {      // drifted — two separate labels at their own spots
+      ctxMo.fillStyle="#111";
+      ctxMo.fillText(`MLP out (${mx.toFixed(2)}, ${my.toFixed(2)})`, Math.min(px+7,150), py+(my>0?-5:15));
+      ctxMo.fillStyle="#c22";
+      ctxMo.fillText(`col_${c} (${colc[0].toFixed(2)}, ${colc[1].toFixed(2)})`,
+        Math.min(cx+R*colc[0]+11,150), cy-R*colc[1]+(colc[1]>0?-5:15));
+    }
   })();
   $("Minfo").innerHTML=
    `input from attention (dial coords) = <b>(${inp[0].toFixed(3)}, ${inp[1].toFixed(3)})</b> ·
