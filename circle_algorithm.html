@@ -197,8 +197,8 @@ the network actually doing it. {5, 8, 17, 49} is the circuit the trained run cho
  &nbsp; α₁ <input type="range" id="Fg1" min="10" max="100" value="100"><span class="val" id="Fg1V">1.00</span>
  &nbsp;&nbsp; φ₂ <input type="range" id="Fp2" min="0" max="628" value="450"><span class="val" id="Fp2V">4.50</span>
  &nbsp; α₂ <input type="range" id="Fg2" min="10" max="100" value="100"><span class="val" id="Fg2V">1.00</span></div>
-<div class="ctl"><button id="Fortho" title="set each φ-pair 90° apart — orthonormal">heal → +90°</button>
- &nbsp; <label title="dependent dials auto-follow — orthogonality enforced as you slide"><input type="checkbox" id="Fideal"> <b>ideal mode</b></label>
+<div class="ctl"><button id="Fortho" title="snap each φ-pair 90° apart and equalize gains — orthonormal, then let go">heal</button>
+ &nbsp; <label title="freeze the dials (φ, α) wherever they are — heal→lock recovers ideal; or lock any cursed geometry (80°, 300°…) and carry it while you move a, b, k"><input type="checkbox" id="Fideal"> <b>lock</b></label>
  &nbsp; <label title="grows the machine to 4 dials — one plane per note"><input type="checkbox" id="Fs2"> <b>add 2nd frequency</b></label>
  <span id="Fs2ctl" style="display:none">
  &nbsp; k₂ <input type="range" id="Fk2" min="1" max="56" value="8"><span class="val" id="Fk2V">8</span>
@@ -207,6 +207,7 @@ the network actually doing it. {5, 8, 17, 49} is the circuit the trained run cho
  &nbsp; φ₄ <input type="range" id="Fp4" min="0" max="628" value="257"><span class="val" id="Fp4V">2.57</span>
  &nbsp; α₄ <input type="range" id="Fg4" min="10" max="100" value="100"><span class="val" id="Fg4V">1.00</span>
  &nbsp; <label title="cram both notes into dials 1–2 — every cell becomes a chord"><input type="checkbox" id="Fcol"> <b>collide planes</b></label></span></div>
+<div class="ctl" id="Fvec" style="font-size:12px;align-items:center"></div>
 </div><!--/spleft-->
 <div class="spright" id="Freadout"></div>
 </div><!--/stickyparams-->
@@ -235,6 +236,14 @@ lone “=” column (far right) — the channel attention reads, ignored by the 
 hover any cell</div>
 <div class="legend" id="Fembd" style="font-size:12.5px;line-height:1.9;background:#f4f6fb;
 border-radius:8px;padding:8px 10px;margin-top:8px"></div>
+
+<h4 style="font-size:14px;margin-top:12px">the wheel — where a and b land as you wind k and rotate the phases</h4>
+<div class="row"><div>
+<canvas id="cvEw" width="340" height="340"></canvas>
+<div class="legend"><span class="dot" style="background:#1f77b4"></span>a &nbsp;
+<span class="dot" style="background:#2ca02c"></span>b &nbsp; small dots = every token's dossier ·
+faint path = the rosette (consecutive tokens → the star polygon {113/k})</div></div>
+<div class="legend" id="Ewinfo" style="flex:1;min-width:300px;font-size:12.5px;line-height:1.95"></div></div>
 
 <h4>①b · the health identities — the doubled-phase arrows must close</h4>
 <canvas id="cvFz" width="1040" height="150"></canvas>
@@ -708,6 +717,7 @@ ErebuildCircles(); drawE(1,1,1);
 /* ───────── Panel F ───────── */
 const cvFl=$("cvFl"),ctxFl=cvFl.getContext("2d");
 const cvFe=$("cvFe"),ctxFe=cvFe.getContext("2d"),cvFu=$("cvFu"),ctxFu=cvFu.getContext("2d");
+const ctxEw=$("cvEw").getContext("2d");
 const cvFz=$("cvFz"),ctxFz=cvFz.getContext("2d");
 const cvFa=$("cvFa"),ctxFa=cvFa.getContext("2d");
 const ctxMp=$("cvMproj").getContext("2d"), ctxMb=$("cvMbars").getContext("2d");
@@ -766,12 +776,26 @@ function drawF(){
     $("Freadout").innerHTML=
       `<div class="lbl">answer</div>
        <div class="ans">(${a}+${b}) mod 113 = ${s}</div>
-       <div class="lbl">ideal · k=1, φ=0</div>
-       <div>peg ${s} · ${psiI.toFixed(3)} rad</div>
-       <div>(${fv(ci[0])}, ${fv(ci[1])})</div>
        <div class="lbl" style="margin-top:3px">current · k=${freqs.join(",")}</div>
        <div>${pegTxt} · ${radTxt}</div>
        <div>(${cc.map(fv).join(", ")})</div>`;
+  }
+  // ── the residual triple, pinned so the vectors stay in view while you read the math ──
+  {
+    const vec=(arr,cl)=>`<span style="display:inline-block;border-left:2px solid ${cl};`
+      +`border-right:2px solid ${cl};border-radius:2px;padding:1px 6px;margin:0 2px;`
+      +`vertical-align:middle;line-height:1.18;text-align:right;font-variant-numeric:tabular-nums">`
+      +arr.map(f3v).join("<br>")+`</span>`;
+    const A3=col(a).concat([1]), B3=col(b).concat([1]), C3=col(s).concat([1]);
+    $("Fvec").innerHTML=
+      `${vec(A3,"#1f77b4")}<span style="font-size:17px;margin:0 1px">+</span>`
+      +`${vec(B3,"#2ca02c")}`
+      +`<span style="font-size:11px;color:#8a93a6;margin:0 4px">═ machine ═▶</span>`
+      +`${vec(C3,"#d62728")}`
+      +`<div style="font-size:11px;color:#555;margin-left:8px;line-height:1.5">`
+      +`<b style="color:#1f77b4">A</b>=${a} &nbsp;+&nbsp; <b style="color:#2ca02c">B</b>=${b}`
+      +` &nbsp;mod 113 =&nbsp; <b style="color:#d62728">c</b>=${s}<br>`
+      +`<span style="color:#8a93a6">[ dial 1 … dial ${D}, type ]</span></div>`;
   }
   const gnorm=Math.max(...dials.map(ts=>ts.reduce((s,t)=>s+t.g,0)));
   const dlab=d=>colld?`dial ${d+1} (chord)`:
@@ -825,7 +849,37 @@ function drawF(){
     const ds=dials.map((_,d)=>`dial ${d+1}: ${cell(x,d)}${dials[d].length>1?
       ` = <b>${f3v(col(x)[d])}</b>`:""}`).join("<br>&nbsp;&nbsp;");
     return `<b>col<sub>${nm}=${x}</sub></b> — ${pegs}<br>&nbsp;&nbsp;${ds}`; };
-  $("Fembd").innerHTML=em(a,"a")+"<br>"+em(b,"b");
+  $("Fembd").innerHTML=`<div style="display:flex;gap:28px;flex-wrap:wrap">`
+    +`<div style="flex:1;min-width:300px">${em(a,"a")}</div>`
+    +`<div style="flex:1;min-width:300px">${em(b,"b")}</div></div>`;
+  // ── the embedding wheel: pegs + rosette + where a, b land ──
+  (function(){ const cx=170,cy=170,R=142, k1=freqs[0];
+    ctxEw.clearRect(0,0,340,340);
+    ctxEw.setLineDash([4,4]); ctxEw.strokeStyle="#c9cfdd";
+    ctxEw.beginPath(); ctxEw.arc(cx,cy,R,0,TAU); ctxEw.stroke(); ctxEw.setLineDash([]);
+    // rosette: consecutive tokens' dossiers connected (star polygon under winding k)
+    ctxEw.strokeStyle="rgba(120,150,220,0.38)"; ctxEw.lineWidth=0.7; ctxEw.beginPath();
+    for(let t=0;t<=P;t++){ const q=col(t%P); const X=cx+R*q[0],Y=cy-R*q[1]; t?ctxEw.lineTo(X,Y):ctxEw.moveTo(X,Y); }
+    ctxEw.stroke();
+    // pegs = every token's dossier
+    ctxEw.fillStyle="#aab8d6";
+    for(let t=0;t<P;t++){ const q=col(t); ctxEw.beginPath(); ctxEw.arc(cx+R*q[0],cy-R*q[1],1.8,0,TAU); ctxEw.fill(); }
+    // a, b with arrows + labels
+    const mk=(x,cl,nm)=>{ const q=col(x);
+      ctxEw.strokeStyle=cl; ctxEw.lineWidth=1.7;
+      ctxEw.beginPath(); ctxEw.moveTo(cx,cy); ctxEw.lineTo(cx+R*q[0],cy-R*q[1]); ctxEw.stroke();
+      ctxEw.fillStyle=cl; ctxEw.beginPath(); ctxEw.arc(cx+R*q[0],cy-R*q[1],5.5,0,TAU); ctxEw.fill();
+      ctxEw.fillStyle="#111"; ctxEw.font="12px sans-serif";
+      ctxEw.fillText(`${nm}=${x} → peg ${(k1*x)%P}`, Math.min(cx+R*q[0]+8,196), cy-R*q[1]+(q[1]>0?-6:15)); };
+    mk(a,"#1f77b4","a"); mk(b,"#2ca02c","b");
+    $("Ewinfo").innerHTML=
+     `Every token is a point on this wheel — its dossier col<sub>x</sub> under the current
+      <b>k=${k1}</b> and phases. Winding k picks <b>which peg</b> each token grabs (peg = (k·x) mod 113);
+      the phases <b>rotate and shear</b> the whole wheel — orthonormal → a clean circle, cursed → an
+      ellipse.<br><br>a=${a} lands on peg <b>${(k1*a)%P}</b> at (${col(a).map(f3v).join(", ")}),
+      b=${b} on peg <b>${(k1*b)%P}</b> at (${col(b).map(f3v).join(", ")}).<br>
+      Attention will average these two points into the half-angle point ½(a+b) below.`;
+  })();
   // ── ①b the health identities: doubled-phase arrows tip-to-tail
   ctxFz.clearRect(0,0,1040,150);
   const diagrams=freqs.map((k,f)=>({
@@ -946,23 +1000,21 @@ function drawF(){
   drawAtt();
   drawMLP();
 }
-function Fenforce(){
-  if(!$("Fideal").checked) return;
-  $("Fp2").value=(+$("Fp1").value+157)%628; $("Fg2").value=$("Fg1").value;
-  $("Fp4").value=(+$("Fp3").value+157)%628; $("Fg4").value=$("Fg3").value;
-}
+function Fenforce(){ /* lock no longer forces orthogonality — it just freezes the dials
+  wherever they sit (see FidealUI). heal is the one-shot that snaps to orthonormal. */ }
 function FidealUI(){
   const on=$("Fideal").checked;
-  ["Fp2","Fg2","Fp4","Fg4"].forEach(id=>$(id).disabled=on);
+  // lock the machine's geometry (phases + gains); leave a, b, k, k₂, γ free to play
+  ["Fp1","Fg1","Fp2","Fg2","Fp3","Fg3","Fp4","Fg4"].forEach(id=>$(id).disabled=on);
 }
 // ── ②a attention stage: matrices + fetch circle ──
 function fmt(v){return (v>=0?"+":"−")+Math.abs(v).toFixed(2);}
 function matHTML(title,M,o){ o=o||{};
   let h=`<div><div class="mt">${title}</div><table class="fmat">`;
-  if(o.cl){ h+="<tr><td></td>"+o.cl.map(c=>`<th>${c}</th>`).join("")+"</tr>"; }
+  if(o.cl){ h+="<tr><td></td>"+o.cl.map((c,j)=>`<th${o.hlcol===j?" style='background:#fff3d6'":""}>${c}</th>`).join("")+"</tr>"; }
   M.forEach((row,i)=>{ h+=`<tr${o.hl===i?" style='background:#fff3d6'":""}>`;
-    if(o.rl) h+=`<th>${o.rl[i]}</th>`;
-    h+=row.map(v=>`<td>${fmt(v)}</td>`).join("")+"</tr>"; });
+    if(o.rl) h+=`<th${o.hl===i?" style='background:#fff3d6'":""}>${o.rl[i]}</th>`;
+    h+=row.map((v,j)=>{ let cs=o.cells?o.cells(i,j):""; if(!cs&&o.hlcol===j) cs="background:#fff3d6"; return `<td${cs?` style="${cs}"`:""}>${fmt(v)}</td>`; }).join("")+"</tr>"; });
   return h+"</table></div>"; }
 function drawAtt(){
   const pr=Fpars();
@@ -981,12 +1033,73 @@ function drawAtt(){
   const sm=sc.map(r=>{const m=Math.max(...r),e=r.map(x=>Math.exp(x-m)),z=e.reduce((p,q)=>p+q);return e.map(x=>x/z);});
   const out=[0,1].map(d=>sm[2][0]*V[0][d]+sm[2][1]*V[1][d]+sm[2][2]*V[2][d]);
   const RL=["a","b","="], PC=["x","y","t"];
+  const w=sm[2], fc=v=>(v<0?"−":"+")+Math.abs(v).toFixed(2);
+  const Tp=M=>M[0].map((_,j)=>M.map(r=>r[j]));   // transpose for display: tokens → columns
+  // transposed V has rows x,y,t · cols a,b,=; tint x,y of col a (blue), col b (green)
+  const vcellsT=(i,j)=> (i===0||i===1) ? (j===0?"background:#e3edfb":j===1?"background:#e9f5ea":"") : "";
+  // ── the fetch as a real circuit: three value vectors drop DOWN and CROSS the gold
+  //    "=" softmax row at multiply gates (the crossing is the meeting), then the scaled
+  //    wires converge into the register. thin lines, dot tips — no fat heads. ──
+  const COLS=[{cx:100,cl:"#1f77b4",lab:"V_a · from a",v:V[0]},
+              {cx:300,cl:"#2ca02c",lab:"V_b · from b",v:V[1]},
+              {cx:500,cl:"#8a93a6",lab:"V_= · from =",v:V[2]}];
+  const vnode=(c)=>{ const x=c.cx-75,y=12, ox=c.cx+44, oy=52, s=22;
+    return `<rect x="${x}" y="${y}" width="150" height="80" rx="11" fill="#fff" stroke="${c.cl}" stroke-width="1.7"/>
+      <text x="${x+13}" y="${y+23}" font-size="12" font-weight="700" fill="${c.cl}">${c.lab}</text>
+      <text x="${x+13}" y="${y+45}" font-size="12.5" fill="#222">(${fc(c.v[0])},</text>
+      <text x="${x+13}" y="${y+65}" font-size="12.5" fill="#222">&nbsp;${fc(c.v[1])})</text>
+      <line x1="${ox-22}" y1="${oy}" x2="${ox+22}" y2="${oy}" stroke="#eceef3"/>
+      <line x1="${ox}" y1="${oy-22}" x2="${ox}" y2="${oy+22}" stroke="#eceef3"/>
+      <line x1="${ox}" y1="${oy}" x2="${(ox+s*c.v[0]).toFixed(1)}" y2="${(oy-s*c.v[1]).toFixed(1)}" stroke="${c.cl}" stroke-width="1.8"/>
+      <circle cx="${(ox+s*c.v[0]).toFixed(1)}" cy="${(oy-s*c.v[1]).toFixed(1)}" r="2.4" fill="${c.cl}"/>`; };
+  const vwire=(c)=>`<line x1="${c.cx}" y1="92" x2="${c.cx}" y2="156" stroke="${c.cl}" stroke-width="2"/>`;
+  const gate=(c,i)=>`<circle cx="${c.cx}" cy="170" r="16" fill="#f6d97a" stroke="#c9962a" stroke-width="1.5"/>`
+    +`<text x="${c.cx}" y="175" font-size="12" text-anchor="middle" fill="#6f5210" font-weight="700">${w[i]<1e-6?"0":"×"+w[i].toFixed(2)}</text>`;
+  const circuit=`
+  <svg viewBox="0 0 600 412" style="width:100%;max-width:600px;height:auto;font-family:ui-monospace,Menlo,monospace">
+    ${COLS.map(vnode).join("")}
+    ${COLS.map(vwire).join("")}
+    <rect x="26" y="156" width="548" height="28" rx="14" fill="#fdf3d0" stroke="#c9b06a" stroke-width="1.5"/>
+    ${COLS.map((c,i)=>gate(c,i)).join("")}
+    <path d="M100,186 C100,226 220,240 283,258" fill="none" stroke="#1f77b4" stroke-width="2.2"/>
+    <path d="M300,186 L300,248" fill="none" stroke="#2ca02c" stroke-width="2.2"/>
+    <path d="M500,186 C500,226 380,240 317,258" fill="none" stroke="#8a93a6" stroke-width="1.4" stroke-dasharray="4 3" opacity="0.5"/>
+    <text x="516" y="212" font-size="10.5" fill="#8a93a6" opacity="0.8">×0 → dead</text>
+    <circle cx="300" cy="270" r="22" fill="#fff" stroke="#555" stroke-width="1.8"/>
+    <text x="300" y="279" font-size="26" text-anchor="middle" fill="#555">+</text>
+    <text x="372" y="266" font-size="12" fill="#8a93a6">½·V_a + ½·V_b</text>
+    <text x="372" y="282" font-size="12" fill="#8a93a6">= half-angle point</text>
+    <line x1="300" y1="292" x2="300" y2="326" stroke="#d62728" stroke-width="2.6"/>
+    <rect x="180" y="326" width="240" height="70" rx="11" fill="#fff6f6" stroke="#d62728" stroke-width="2"/>
+    <text x="198" y="353" font-size="13" font-weight="700" fill="#d62728">register c → readout</text>
+    <text x="198" y="378" font-size="15" fill="#222">(${fc(out[0])}, ${fc(out[1])}, <tspan fill="#8a93a6">−1</tspan>)</text>
+    <line x1="366" y1="361" x2="410" y2="361" stroke="#f2cfcf"/>
+    <line x1="388" y1="340" x2="388" y2="382" stroke="#f2cfcf"/>
+    <line x1="388" y1="361" x2="${(388+20*out[0]).toFixed(1)}" y2="${(361-20*out[1]).toFixed(1)}" stroke="#d62728" stroke-width="1.8"/>
+    <circle cx="${(388+20*out[0]).toFixed(1)}" cy="${(361-20*out[1]).toFixed(1)}" r="2.4" fill="#d62728"/>
+    <path d="M470,300 L420,332" fill="none" stroke="#8a93a6" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <text x="428" y="296" font-size="11" fill="#8a93a6">skip · type −1</text>
+  </svg>`;
+  // ── top-down flow: residual → Q|K|V → scores → softmax(◀ reuses V) → [circuit] ──
+  const arwD=`<div style="text-align:center;color:#c9b06a;font-size:20px;line-height:0.85;margin:2px 0">▼</div>`;
+  const lbl=t=>`<div style="text-align:center;font-size:11px;color:#8a93a6">${t}</div>`;
+  const rowc=h=>`<div style="display:flex;justify-content:center;align-items:center;gap:14px;flex-wrap:wrap">${h}</div>`;
   $("Fmats").innerHTML=
-    matHTML("residual in (rows: a, b, =)",res,{rl:RL,cl:PC})
-   +matHTML("W_Q",WQ,{cl:PC})+matHTML("W_K",WK,{cl:PC})+matHTML("W_V",WV,{cl:PC})
-   +matHTML("Q = res·W_Qᵀ",Q,{rl:RL,cl:PC})+matHTML("K",K,{rl:RL,cl:PC})+matHTML("V",V,{rl:RL,cl:PC})
-   +matHTML("scores  q·k /√d",sc,{rl:RL,cl:RL,hl:2})
-   +matHTML("softmax (rows sum to 1)",sm,{rl:RL,cl:RL,hl:2});
+     `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;width:100%">`
+   + rowc(matHTML("residual · cols a,b,=",Tp(res),{rl:PC,cl:RL,hlcol:2}))
+   + lbl("project · × W_Q, × W_K, × W_V") + arwD
+   + rowc(matHTML("Q = W_Q·res",Tp(Q),{rl:PC,cl:RL,hlcol:2})
+         +matHTML("K = W_K·res",Tp(K),{rl:PC,cl:RL})
+         +matHTML("V = W_V·res",Tp(V),{rl:PC,cl:RL,cells:vcellsT}))
+   + lbl("score · Qᵀ·K / √d") + arwD
+   + rowc(matHTML("scores /√d · cols = query",Tp(sc),{rl:RL,cl:RL,hlcol:2}))
+   + lbl("softmax down each column (over keys) → the “=” query column (½, ½, ~0)") + arwD
+   + rowc(matHTML("softmax",Tp(sm),{rl:RL,cl:RL,hlcol:2})
+         +`<div style="text-align:center;color:#c9b06a;font-size:15px;line-height:1.3">◀&nbsp;·&nbsp;V<br><span style="font-size:10px;color:#8a93a6">(reused<br>from above)</span></div>`
+         +matHTML("V",Tp(V),{rl:PC,cl:RL,cells:vcellsT}))
+   + lbl("fetch · the value vectors flow into the register") + arwD
+   + rowc(circuit)
+   + `</div>`;
   // fetch circle
   const cx=180,cy=180,R=125;
   ctxFa.clearRect(0,0,360,360);
@@ -1188,8 +1301,8 @@ $("Fideal").addEventListener("change",()=>{FidealUI();Fenforce();drawF();});
 $("Fs2").addEventListener("change",()=>{
   $("Fs2ctl").style.display=$("Fs2").checked?"inline":"none"; Fenforce(); drawF(); });
 $("Fcol").addEventListener("change",()=>{Fenforce();drawF();});
-$("Fortho").onclick=()=>{ $("Fp2").value=(+$("Fp1").value+157)%628;
-  $("Fp4").value=(+$("Fp3").value+157)%628; drawF(); };
+$("Fortho").onclick=()=>{ $("Fp2").value=(+$("Fp1").value+157)%628; $("Fg2").value=$("Fg1").value;
+  $("Fp4").value=(+$("Fp3").value+157)%628; $("Fg4").value=$("Fg3").value; drawF(); };
 // hover formulas on both tables
 function FtipShow(html,e){ Ftip.innerHTML=html; Ftip.style.display="block";
   Ftip.style.left=(e.clientX+14)+"px"; Ftip.style.top=(e.clientY+10)+"px"; }
