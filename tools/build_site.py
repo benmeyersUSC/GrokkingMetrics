@@ -311,49 +311,83 @@ drawReal();
 _SONIFY_HTML = """
 <div class='card' id='sonify'>
 <h2>Listen to the model train — the embedding spectrum as sound</h2>
-<p class='sub'>The same embedding Fourier spectrum drawn in the heatmap above, but played.
-Every frequency <b>k</b> becomes a partial at pitch <b>k × fundamental</b>, and its loudness
-is √(spectral share). At initialization the power is smeared across all 56 frequencies — a
-dense, buzzing noise. As training runs the power collapses onto the circuit frequencies
-(__TOP__) and the noise resolves into a steady harmony. Nothing is added by hand: the sound
-<i>is</i> the DFT of the embedding rows, all at once, swept over training (step __STEP0__ →
-__STEPN__).</p>
+<p class='sub'>The embedding Fourier spectrum, per snapshot, played out loud. Every frequency
+<b>k</b> becomes a partial at pitch <b>k × fundamental</b>, its loudness √(spectral share).
+At init the power is smeared across all 56 frequencies — a dense, buzzing noise; as training
+runs it collapses onto a handful of circuit frequencies and the noise resolves into a steady
+harmony. Nothing is added by hand — the sound <i>is</i> the DFT of the embedding rows, all at
+once, swept over training. Pick any of the 10 ensemble seeds (or the canonical run): each
+finds its own circuit, so each groks to its own chord.</p>
 <div class='ctl'>
   <button id='sonPlay'>▶ play</button>
   <button id='sonStop' disabled>⏹ stop</button>
+  &nbsp; run <select id='sonSeed'>__OPTIONS__</select>
   &nbsp; length <select id='sonDur'><option value='12'>12 s</option><option value='20' selected>20 s</option><option value='32'>32 s</option></select>
   &nbsp; fundamental <select id='sonF0'><option value='55'>55 Hz · A1</option><option value='65.41' selected>65 Hz · C2</option><option value='43.65'>44 Hz · F1</option></select>
+  &nbsp; <span id='sonCirc' style='color:#d62728;font-weight:600'></span>
   &nbsp; <span id='sonStep' style='color:#555;font-variant-numeric:tabular-nums'></span>
 </div>
-<canvas id='sonCv' width='1180' height='220' style='width:100%;max-width:1180px;height:auto;margin-top:8px'></canvas>
-<div class='legend'>bars = the 56 partials k = 1…56 at the current instant · bar height = √share (what
-you hear) · red = the circuit frequencies · the sweep runs init → grokked, so you watch the
-bands take root as you hear them lock in.</div>
+<canvas id='sonHeat' width='1180' height='300' style='width:100%;max-width:1180px;height:auto;margin-top:8px;border-radius:6px'></canvas>
+<div class='legend'>heatmap = the selected run's embedding spectrum, k = 1…56 (rows, k=1 bottom)
+× training step (columns); brighter = more power · red ticks = that run's circuit
+frequencies · the white line is the playhead.</div>
+<canvas id='sonCv' width='1180' height='150' style='width:100%;max-width:1180px;height:auto;margin-top:6px'></canvas>
+<div class='legend'>bars = the 56 partials at the current instant · height = √share (what you
+hear) · red = circuit frequencies. Watch the bands take root as you hear them lock in.</div>
 <script>
 (function(){
-  const SON=__DATA__, CIRC=__CIRCUIT__, N=56;
+  const SEEDS=__SEEDS__, ORDER=__ORDER__, N=56;
+  const heat=document.getElementById('sonHeat'), hcx=heat.getContext('2d');
   const cv=document.getElementById('sonCv'), cx=cv.getContext('2d');
-  const stepEl=document.getElementById('sonStep');
+  const stepEl=document.getElementById('sonStep'), circEl=document.getElementById('sonCirc');
   const bPlay=document.getElementById('sonPlay'), bStop=document.getElementById('sonStop');
+  const selSeed=document.getElementById('sonSeed');
+  const cache=document.createElement('canvas'); cache.width=heat.width; cache.height=heat.height;
   let ctx=null, oscs=[], gains=[], master=null, comp=null, raf=0, playing=false, t0=0;
-  const smax=Math.sqrt(Math.max.apply(null, SON.spec.map(r=>Math.max.apply(null,r))));
+  let key=ORDER[0], D=SEEDS[key], smax=1;
   const lerp=(a,b,t)=>a+(b-a)*t;
+  function magma(t){ t=Math.max(0,Math.min(1,t));
+    const cs=[[0,0,4],[81,18,124],[183,55,121],[252,137,97],[252,253,191]];
+    const s=t*4, i=Math.min(3,Math.floor(s)), f=s-i, a=cs[i], b=cs[i+1];
+    return 'rgb('+Math.round(a[0]+(b[0]-a[0])*f)+','+Math.round(a[1]+(b[1]-a[1])*f)+','+Math.round(a[2]+(b[2]-a[2])*f)+')'; }
   function frameAt(f){
-    const n=SON.spec.length, i=Math.max(0,Math.min(Math.floor(f), n-2)), t=f-i;
-    const A=SON.spec[i], B=SON.spec[i+1], amp=new Array(N);
+    const n=D.spec.length, i=Math.max(0,Math.min(Math.floor(f), n-2)), t=f-i;
+    const A=D.spec[i], B=D.spec[i+1], amp=new Array(N);
     for(let k=0;k<N;k++) amp[k]=Math.max(0, lerp(A[k],B[k],t));
-    return {amp, step:Math.round(lerp(SON.steps[i],SON.steps[i+1],t))};
+    return {amp, step:Math.round(lerp(D.steps[i],D.steps[i+1],t))};
   }
-  function draw(fr){
+  function buildHeat(){
+    const W=heat.width, H=heat.height, n=D.spec.length, cw=W/n, rh=H/N, c=cache.getContext('2d');
+    c.fillStyle='#000'; c.fillRect(0,0,W,H);
+    for(let j=0;j<n;j++) for(let k=0;k<N;k++){
+      c.fillStyle=magma(Math.sqrt(D.spec[j][k])/smax);
+      c.fillRect(j*cw, H-(k+1)*rh, Math.ceil(cw)+0.5, Math.ceil(rh)+0.5); }
+    c.fillStyle='#d62728'; D.circuit.forEach(k=>c.fillRect(W-5, H-k*rh, 5, Math.max(2,rh)));
+    c.fillStyle='#cfd6e4'; c.font='11px sans-serif';
+    c.fillText('k=56',4,13); c.fillText('k=1',4,H-4);
+  }
+  function paintHeat(frac){
+    const W=heat.width, H=heat.height;
+    hcx.clearRect(0,0,W,H); hcx.drawImage(cache,0,0);
+    if(frac!=null){ const x=frac*W; hcx.strokeStyle='#fff'; hcx.lineWidth=1.6;
+      hcx.beginPath(); hcx.moveTo(x,0); hcx.lineTo(x,H); hcx.stroke(); }
+  }
+  function drawBars(fr){
     const W=cv.width, H=cv.height, bw=W/N;
     cx.clearRect(0,0,W,H);
     for(let k=0;k<N;k++){
-      const h=(Math.sqrt(fr.amp[k])/smax)*(H-22), on=CIRC.indexOf(k+1)>=0;
-      cx.globalAlpha= on?1:0.55; cx.fillStyle= on?'#d62728':'#c8a94a';
-      cx.fillRect(k*bw+1, H-16-h, bw-1.6, h);
-    }
+      const h=(Math.sqrt(fr.amp[k])/smax)*(H-22), on=D.circuit.indexOf(k+1)>=0;
+      cx.globalAlpha= on?1:0.5; cx.fillStyle= on?'#d62728':'#c8a94a';
+      cx.fillRect(k*bw+1, H-16-h, bw-1.6, h); }
     cx.globalAlpha=1; cx.fillStyle='#8a93a6'; cx.font='11px sans-serif';
     cx.fillText('k=1',2,H-3); cx.fillText('k=56',W-36,H-3);
+  }
+  function setSeed(k){
+    key=k; D=SEEDS[k]; let m=0;
+    for(const r of D.spec) for(const v of r) if(v>m) m=v;
+    smax=Math.sqrt(m)||1;
+    circEl.textContent='circuit: '+D.circuit.map(x=>'k='+x).join(', ');
+    stepEl.textContent=''; buildHeat(); paintHeat(null); drawBars(frameAt(D.spec.length-1));
   }
   function stop(){
     if(!playing && !ctx) return; playing=false; cancelAnimationFrame(raf);
@@ -361,7 +395,7 @@ bands take root as you hear them lock in.</div>
       master.gain.setTargetAtTime(0.0001, now, 0.05);
       setTimeout(()=>{ oscs.forEach(o=>{try{o.stop()}catch(e){}}); oscs=[];
         if(ctx){ctx.close(); ctx=null;} }, 220); }
-    bPlay.disabled=false; bStop.disabled=true;
+    bPlay.disabled=false; bStop.disabled=true; paintHeat(null);
   }
   function play(){
     if(playing) return; playing=true; bPlay.disabled=true; bStop.disabled=false;
@@ -376,54 +410,63 @@ bands take root as you hear them lock in.</div>
     for(let k=0;k<N;k++){ const o=ctx.createOscillator(), g=ctx.createGain();
       o.type='sine'; o.frequency.value=F0*(k+1); g.gain.value=0.0001;
       o.connect(g); g.connect(master); o.start(); oscs.push(o); gains.push(g); }
-    t0=ctx.currentTime; const n=SON.spec.length;
+    t0=ctx.currentTime; const n=D.spec.length;
     function apply(fr){ const now=ctx.currentTime;
       for(let k=0;k<N;k++) gains[k].gain.setTargetAtTime(Math.max(0.0001,Math.sqrt(fr.amp[k])), now, 0.03); }
     function loop(){
       if(!playing) return;
       const frac=(ctx.currentTime-t0)/DUR;
-      if(frac>=1){ const fr=frameAt(n-1); apply(fr); draw(fr);
+      if(frac>=1){ const fr=frameAt(n-1); apply(fr); paintHeat(1); drawBars(fr);
         stepEl.textContent='step '+fr.step+' — grokked'; setTimeout(stop, 700); return; }
-      const fr=frameAt(frac*(n-1)); apply(fr); draw(fr);
+      const fr=frameAt(frac*(n-1)); apply(fr); paintHeat(frac); drawBars(fr);
       stepEl.textContent='step '+fr.step;
       raf=requestAnimationFrame(loop);
     }
     loop();
   }
   bPlay.onclick=play; bStop.onclick=stop;
-  draw(frameAt(SON.spec.length-1));
+  selSeed.onchange=()=>{ if(playing) stop(); setTimeout(()=>setSeed(selSeed.value), playing?240:0); };
+  setSeed(ORDER[0]);
 })();
 </script>
 </div>"""
 
 
-def build_spectrum_sonifier(d: Path) -> str:
-    """Sonify the embedding Fourier spectrum over training: additive synthesis where each
-    frequency k is a partial (pitch = k x fundamental) with amplitude sqrt(spectral share).
-    Flat/buzzy at init, collapsing onto the circuit frequencies as the network groks. Same
-    data as the embedding-spectrum heatmap."""
+def build_spectrum_sonifier(runs) -> str:
+    """Per-run embedding Fourier spectra → a seed-selectable heatmap + additive-synthesis
+    sound. runs: list of (label, dir). Each frequency k is a partial (pitch = k x
+    fundamental, amplitude sqrt(spectral share)); flat/buzzy at init, collapsing onto that
+    run's circuit frequencies as it groks. Same data as the embedding-spectrum heatmap."""
     import json
-    mpath = d / "param_manifest.txt"
-    snaps = sorted(d.glob("snaps/snap_*.bin"),
-                   key=lambda p: int(re.search(r"snap_(\d+)", p.name).group(1)))
-    if not mpath.exists() or len(snaps) < 2:
+    seeds, order = {}, []
+    for label, d in runs:
+        mpath = d / "param_manifest.txt"
+        snaps = sorted(d.glob("snaps/snap_*.bin"),
+                       key=lambda p: int(re.search(r"snap_(\d+)", p.name).group(1)))
+        if not mpath.exists() or len(snaps) < 2:
+            continue
+        sizes = [int(x) for x in mpath.read_text().split()]
+        steps, spec = [], []
+        for sp in snaps:
+            step = int(re.search(r"snap_(\d+)", sp.name).group(1))
+            emb, _ = read_snap_weights(sp, sizes)
+            pe = embedding_freq_power(emb); pe = pe / pe.sum()
+            steps.append(step)
+            spec.append([round(float(x), 4) for x in pe])
+        circuit = sorted(int(i + 1) for i in np.argsort(np.array(spec[-1]))[-4:])
+        seeds[label] = {"steps": steps, "spec": spec, "circuit": circuit}
+        order.append(label)
+    if not seeds:
         return ""
-    sizes = [int(x) for x in mpath.read_text().split()]
-    steps, spec = [], []
-    for sp in snaps:
-        step = int(re.search(r"snap_(\d+)", sp.name).group(1))
-        emb, _ = read_snap_weights(sp, sizes)
-        pe = embedding_freq_power(emb); pe = pe / pe.sum()
-        steps.append(step)
-        spec.append([round(float(x), 5) for x in pe])
-    circuit = sorted(int(i + 1) for i in np.argsort(np.array(spec[-1]))[-4:])
+    options = "".join(
+        "<option value='%s'%s>%s</option>" % (lbl, " selected" if i == 0 else "", lbl)
+        for i, lbl in enumerate(order))
     html = (_SONIFY_HTML
-            .replace("__DATA__", json.dumps({"steps": steps, "spec": spec}))
-            .replace("__CIRCUIT__", json.dumps(circuit))
-            .replace("__TOP__", ", ".join("k=%d" % k for k in circuit))
-            .replace("__STEP0__", str(steps[0]))
-            .replace("__STEPN__", str(steps[-1])))
-    print("spectrum sonifier baked: %d snapshots, circuit %s" % (len(steps), circuit))
+            .replace("__SEEDS__", json.dumps(seeds))
+            .replace("__ORDER__", json.dumps(order))
+            .replace("__OPTIONS__", options))
+    print("sonifier baked: %d runs — %s" % (
+        len(order), "; ".join("%s→%s" % (l, seeds[l]["circuit"]) for l in order)))
     return html
 
 
@@ -448,7 +491,9 @@ def main() -> int:
     ens_html, groks = build_ensemble(seed_dirs)
     _, _, v3_grok, _ = run_curves(V3)
 
-    v3_html = (build_seed_state(V3) + build_seed_spectra(V3) + build_spectrum_sonifier(V3)
+    sonify_runs = [("canonical (v3)", V3)] + [
+        ("seed " + p.name.split("_")[1], p) for p in seed_dirs]
+    v3_html = (build_seed_state(V3) + build_seed_spectra(V3) + build_spectrum_sonifier(sonify_runs)
                + (build_seed_leverage(V3) if (V3 / "leverage_realized.bin").exists() else ""))
 
     real_html = build_real_model()
