@@ -308,6 +308,125 @@ drawReal();
     return html
 
 
+_SONIFY_HTML = """
+<div class='card' id='sonify'>
+<h2>Listen to the model train — the embedding spectrum as sound</h2>
+<p class='sub'>The same embedding Fourier spectrum drawn in the heatmap above, but played.
+Every frequency <b>k</b> becomes a partial at pitch <b>k × fundamental</b>, and its loudness
+is √(spectral share). At initialization the power is smeared across all 56 frequencies — a
+dense, buzzing noise. As training runs the power collapses onto the circuit frequencies
+(__TOP__) and the noise resolves into a steady harmony. Nothing is added by hand: the sound
+<i>is</i> the DFT of the embedding rows, all at once, swept over training (step __STEP0__ →
+__STEPN__).</p>
+<div class='ctl'>
+  <button id='sonPlay'>▶ play</button>
+  <button id='sonStop' disabled>⏹ stop</button>
+  &nbsp; length <select id='sonDur'><option value='12'>12 s</option><option value='20' selected>20 s</option><option value='32'>32 s</option></select>
+  &nbsp; fundamental <select id='sonF0'><option value='55'>55 Hz · A1</option><option value='65.41' selected>65 Hz · C2</option><option value='43.65'>44 Hz · F1</option></select>
+  &nbsp; <span id='sonStep' style='color:#555;font-variant-numeric:tabular-nums'></span>
+</div>
+<canvas id='sonCv' width='1180' height='220' style='width:100%;max-width:1180px;height:auto;margin-top:8px'></canvas>
+<div class='legend'>bars = the 56 partials k = 1…56 at the current instant · bar height = √share (what
+you hear) · red = the circuit frequencies · the sweep runs init → grokked, so you watch the
+bands take root as you hear them lock in.</div>
+<script>
+(function(){
+  const SON=__DATA__, CIRC=__CIRCUIT__, N=56;
+  const cv=document.getElementById('sonCv'), cx=cv.getContext('2d');
+  const stepEl=document.getElementById('sonStep');
+  const bPlay=document.getElementById('sonPlay'), bStop=document.getElementById('sonStop');
+  let ctx=null, oscs=[], gains=[], master=null, comp=null, raf=0, playing=false, t0=0;
+  const smax=Math.sqrt(Math.max.apply(null, SON.spec.map(r=>Math.max.apply(null,r))));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  function frameAt(f){
+    const n=SON.spec.length, i=Math.max(0,Math.min(Math.floor(f), n-2)), t=f-i;
+    const A=SON.spec[i], B=SON.spec[i+1], amp=new Array(N);
+    for(let k=0;k<N;k++) amp[k]=Math.max(0, lerp(A[k],B[k],t));
+    return {amp, step:Math.round(lerp(SON.steps[i],SON.steps[i+1],t))};
+  }
+  function draw(fr){
+    const W=cv.width, H=cv.height, bw=W/N;
+    cx.clearRect(0,0,W,H);
+    for(let k=0;k<N;k++){
+      const h=(Math.sqrt(fr.amp[k])/smax)*(H-22), on=CIRC.indexOf(k+1)>=0;
+      cx.globalAlpha= on?1:0.55; cx.fillStyle= on?'#d62728':'#c8a94a';
+      cx.fillRect(k*bw+1, H-16-h, bw-1.6, h);
+    }
+    cx.globalAlpha=1; cx.fillStyle='#8a93a6'; cx.font='11px sans-serif';
+    cx.fillText('k=1',2,H-3); cx.fillText('k=56',W-36,H-3);
+  }
+  function stop(){
+    if(!playing && !ctx) return; playing=false; cancelAnimationFrame(raf);
+    if(ctx){ const now=ctx.currentTime; master.gain.cancelScheduledValues(now);
+      master.gain.setTargetAtTime(0.0001, now, 0.05);
+      setTimeout(()=>{ oscs.forEach(o=>{try{o.stop()}catch(e){}}); oscs=[];
+        if(ctx){ctx.close(); ctx=null;} }, 220); }
+    bPlay.disabled=false; bStop.disabled=true;
+  }
+  function play(){
+    if(playing) return; playing=true; bPlay.disabled=true; bStop.disabled=false;
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const F0=parseFloat(document.getElementById('sonF0').value);
+    const DUR=parseFloat(document.getElementById('sonDur').value);
+    comp=ctx.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=12;
+    comp.connect(ctx.destination);
+    master=ctx.createGain(); master.gain.value=0.0001; master.connect(comp);
+    master.gain.setTargetAtTime(0.16, ctx.currentTime, 0.1);
+    oscs=[]; gains=[];
+    for(let k=0;k<N;k++){ const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.value=F0*(k+1); g.gain.value=0.0001;
+      o.connect(g); g.connect(master); o.start(); oscs.push(o); gains.push(g); }
+    t0=ctx.currentTime; const n=SON.spec.length;
+    function apply(fr){ const now=ctx.currentTime;
+      for(let k=0;k<N;k++) gains[k].gain.setTargetAtTime(Math.max(0.0001,Math.sqrt(fr.amp[k])), now, 0.03); }
+    function loop(){
+      if(!playing) return;
+      const frac=(ctx.currentTime-t0)/DUR;
+      if(frac>=1){ const fr=frameAt(n-1); apply(fr); draw(fr);
+        stepEl.textContent='step '+fr.step+' — grokked'; setTimeout(stop, 700); return; }
+      const fr=frameAt(frac*(n-1)); apply(fr); draw(fr);
+      stepEl.textContent='step '+fr.step;
+      raf=requestAnimationFrame(loop);
+    }
+    loop();
+  }
+  bPlay.onclick=play; bStop.onclick=stop;
+  draw(frameAt(SON.spec.length-1));
+})();
+</script>
+</div>"""
+
+
+def build_spectrum_sonifier(d: Path) -> str:
+    """Sonify the embedding Fourier spectrum over training: additive synthesis where each
+    frequency k is a partial (pitch = k x fundamental) with amplitude sqrt(spectral share).
+    Flat/buzzy at init, collapsing onto the circuit frequencies as the network groks. Same
+    data as the embedding-spectrum heatmap."""
+    import json
+    mpath = d / "param_manifest.txt"
+    snaps = sorted(d.glob("snaps/snap_*.bin"),
+                   key=lambda p: int(re.search(r"snap_(\d+)", p.name).group(1)))
+    if not mpath.exists() or len(snaps) < 2:
+        return ""
+    sizes = [int(x) for x in mpath.read_text().split()]
+    steps, spec = [], []
+    for sp in snaps:
+        step = int(re.search(r"snap_(\d+)", sp.name).group(1))
+        emb, _ = read_snap_weights(sp, sizes)
+        pe = embedding_freq_power(emb); pe = pe / pe.sum()
+        steps.append(step)
+        spec.append([round(float(x), 5) for x in pe])
+    circuit = sorted(int(i + 1) for i in np.argsort(np.array(spec[-1]))[-4:])
+    html = (_SONIFY_HTML
+            .replace("__DATA__", json.dumps({"steps": steps, "spec": spec}))
+            .replace("__CIRCUIT__", json.dumps(circuit))
+            .replace("__TOP__", ", ".join("k=%d" % k for k in circuit))
+            .replace("__STEP0__", str(steps[0]))
+            .replace("__STEPN__", str(steps[-1])))
+    print("spectrum sonifier baked: %d snapshots, circuit %s" % (len(steps), circuit))
+    return html
+
+
 def main() -> int:
     docs = ROOT / "docs"
     docs.mkdir(exist_ok=True)
@@ -329,7 +448,7 @@ def main() -> int:
     ens_html, groks = build_ensemble(seed_dirs)
     _, _, v3_grok, _ = run_curves(V3)
 
-    v3_html = (build_seed_state(V3) + build_seed_spectra(V3)
+    v3_html = (build_seed_state(V3) + build_seed_spectra(V3) + build_spectrum_sonifier(V3)
                + (build_seed_leverage(V3) if (V3 / "leverage_realized.bin").exists() else ""))
 
     real_html = build_real_model()
@@ -365,6 +484,7 @@ interference.</p></div>
 grok moment (peak validation-accuracy slope) sits at τ = 0. Alignment is per-run, which
 is why the transition stays sharp despite grok steps spanning {min(groks)}–{max(groks)}.</p>
 {ens_html}</div>
+<div class='card' id='gloss'><h2>Glossary</h2><dl class='gloss'>{gloss}</dl></div>
 {knob_html}
 <div class='card' id='v3'><h2>The instrumented run</h2>
 <p class='sub'>The canonical seed with the full instrument suite: crystallization and
@@ -400,7 +520,6 @@ trained network with its full instrument suite. Grok steps across 10 seeds:
 <div class='mode' id='mode-toy'>{mode_toy}</div>
 <div class='mode' id='mode-real'>{mode_real}</div>
 
-<div class='card' id='gloss'><h2>Glossary</h2><dl class='gloss'>{gloss}</dl></div>
 <p style='color:#888;font-size:12.5px;text-align:center'>Built from scratch:
 <a href='https://github.com/benmeyersUSC/TTNN'>TTTN</a> ·
 <a href='https://github.com/benmeyersUSC/GrokkingMetrics'>GrokkingMetrics</a></p>
