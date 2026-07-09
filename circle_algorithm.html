@@ -30,6 +30,22 @@ button:hover{background:#f0f3f9}
 .fmat td,.fmat th{border:1px solid #e3e7f0;padding:2px 6px;text-align:right;font-size:11px}
 .fmat th{background:#f4f6fb;color:#555;font-weight:600}
 .fmatwrap{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.mharm{font-size:13.5px;line-height:1.6;color:#1a2030;max-width:1010px}
+.mharm .mh1{font-weight:600;margin:15px 0 6px}
+.mharm .mid{background:#fff8ec;border:1px solid #f0dfb8;border-radius:8px;padding:10px 13px;
+  font-family:ui-monospace,Menlo,monospace;font-size:14px;line-height:1.7}
+.mharm .mh2{margin-top:13px;background:#f4f6fb;border-radius:8px;padding:11px 13px;line-height:1.75}
+.mharm .note{color:#7a8398;font-weight:400;font-size:12px;display:block;margin-top:4px}
+.mharm .meq{font-family:ui-monospace,Menlo,monospace;font-size:13.5px;padding:4px 0 4px 8px;
+  border-left:3px solid #e3e7f0;margin:4px 0;line-height:1.5}
+.mharm .mnl{display:inline-block;width:30px;color:#2ca02c;font-weight:700}
+.mbands{border-collapse:collapse;margin:8px 0 2px;width:100%;font-size:13px}
+.mbands th,.mbands td{border:1px solid #e3e7f0;padding:7px 10px;text-align:left;vertical-align:middle}
+.mbands th{background:#f4f6fb;font-weight:600}
+.mbands .bn{font-weight:600;white-space:nowrap}
+.mbands .bc{color:#7a8398;font-weight:400;font-size:11.5px}
+.mbands .bt{font-family:ui-monospace,Menlo,monospace;color:#4a5061}
+.mbands .bs{font-family:ui-monospace,Menlo,monospace;text-align:right;font-size:14px}
 .fmatwrap .mt{font-size:11.5px;color:#555;text-align:center;margin-bottom:2px}
 .stickyparams{position:sticky;top:54px;z-index:40;background:rgba(255,255,255,0.97);
   backdrop-filter:blur(5px);margin:0 0 16px;padding:10px 16px 6px;border-radius:12px;
@@ -1237,25 +1253,42 @@ function drawMLP(){
     <tr><td colspan="6" style="text-align:right">Σⱼ hⱼ·(out-wt) =</td><td><b>(${oxr.toFixed(3)}, ${oyr.toFixed(3)})</b></td></tr>
     <tr><td colspan="6" style="text-align:right">× 3π/5 → <b>output</b> =</td><td><b>(${(MLPsc*oxr).toFixed(3)}, ${(MLPsc*oyr).toFixed(3)})</b></td></tr></table>
     <div style="font-size:11px;color:#8a93a6;margin-top:2px">input = (X, Y) = (${inp[0].toFixed(3)}, ${inp[1].toFixed(3)})</div>`;
-  // ── why only the octave survives: Σⱼcos(m·ψⱼ)=0 unless m is a multiple of 5 ──
-  let Sc=0, Sf=0, So=0; const cterm=[];
-  for(let j=0;j<MLPN;j++){ const t=Math.cos(2*MLPpsi[j]+phi0);
-    cterm.push(t); Sc+=t;
-    Sf+=t*Math.cos(beta-MLPpsi[j]);
-    So+=t*Math.cos(2*beta-2*MLPpsi[j]); }
-  const red=v=>`<span style="color:#c22">${v}</span>`, grn=v=>`<span style="color:#1b7f3b">${v}</span>`;
-  $("Mcancel").innerHTML=
-   `<div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.95">
-    <b>WHY the output points at 2β</b> — substitute hⱼ = 1/π + ½cos(β−ψⱼ) + (2/3π)cos(2β−2ψⱼ) + … into
-    out_x = Σⱼcos(2ψⱼ+φ₁)·hⱼ. Each piece is a sum Σⱼcos(m·ψⱼ + const), and
-    ${grn("Σⱼcos(m·ψⱼ) = 0 unless m is a multiple of 5")} (your Desmos plot; N=5 here):<br>
-    ${red("constant")} → freq <b>m=2</b>: Σⱼcos(2ψⱼ+φ₁) = ${cterm.map(v=>fp(v)).join(" ")} = ${red(Sc.toFixed(3))} &nbsp;→ dies (2 ≠ 5·k)<br>
-    ${red("fundamental")} → the product splits into <b>m=1</b> and <b>m=3</b>: Σ = ${red(Sf.toFixed(3))} &nbsp;→ dies<br>
-    ${grn("octave")} → the out-weight's 2ψⱼ cancels the harmonic's 2ψⱼ, leaving <b>m=0</b> (no ψⱼ at all):
-      Σⱼcos(0) = 5, the ${grn("resonance")} → (2/3π)·${grn(So.toFixed(3))} = ${grn(((2/(3*Math.PI))*So).toFixed(3))} = (5/3π)cos(2β+φ₁)<br>
-    <b>m=0 is the only multiple of 5 any term reaches</b> — that's the whole doubling. (the ~1° miss is n=8's
-    m=10, the next resonance up, that 5 neurons can't cancel.)
-   </div>`;
+  // ── the harmonic story: ReLU's latent Fourier series → which harmonics cancel ──
+  const deg=r=>r*180/Math.PI, sum=arr=>arr.reduce((s,v)=>s+v,0);
+  const twt=MLPpsi.map(ps=>Math.cos(2*ps+phi0));                 // out-weight x: cos(2ψ+φ₁)
+  const dcT=twt.slice();                                          // constant band, per neuron
+  const fnT=MLPpsi.map((ps,j)=>twt[j]*Math.cos(beta-ps));         // fundamental band
+  const ocT=MLPpsi.map((ps,j)=>twt[j]*Math.cos(2*beta-2*ps));     // octave band
+  const Sc2=sum(dcT), Sf2=sum(fnT), So2=sum(ocT);
+  let neq="";
+  for(let j=0;j<MLPN;j++){ const u=beta-MLPpsi[j];
+    neq+=`<div class="meq"><span class="mnl">n${j}</span>h<sub>${j}</sub> = ReLU( cos(β − ${deg(MLPpsi[j]).toFixed(0)}°) ) `
+      +`= ReLU( cos(${deg(u).toFixed(1)}°) ) = ReLU(${Math.cos(u).toFixed(3)}) = `
+      +`<b style="color:${h[j]>1e-9?'#1b7f3b':'#9aa3b2'}">${h[j].toFixed(3)}</b></div>`; }
+  const band=(nm,cf,terms,S,fate,ok)=>`<tr>`
+    +`<td class="bn">${nm}<br><span class="bc">${cf}</span></td>`
+    +`<td class="bt">${terms.map((v,j)=>(j?" + ":"")+fp(v)).join("")}</td>`
+    +`<td class="bs" style="color:${ok?'#1b7f3b':'#c22'}"><b>${S.toFixed(3)}</b></td>`
+    +`<td style="color:${ok?'#1b7f3b':'#c22'};white-space:nowrap">${fate}</td></tr>`;
+  $("Mcancel").innerHTML=`<div class="mharm">
+    <div class="mh1">① the latent identity ReLU exploits — the Fourier series of ReLU(cos):</div>
+    <div class="mid">ReLU(cos u) = <b>1/π</b> + <b>½</b>·cos u + <b>(2/3π)</b>·cos 2u − <b>(2/15π)</b>·cos 4u + <b>(2/35π)</b>·cos 6u − …
+      <span class="note">a DC term, the fundamental, then <b>only even harmonics</b> (every odd harmonic ≥ 3 is exactly zero). The <b>cos 2u</b> term — the octave — is the one that does the doubling.</span></div>
+    <div class="mh1">② the 5 neurons — each a ReLU of the input read through its own axis ψ<sub>j</sub> = 72°·j &nbsp;<span class="note" style="display:inline">(β = ${deg(beta).toFixed(1)}°, X = ${inp[0].toFixed(3)}, Y = ${inp[1].toFixed(3)})</span></div>
+    ${neq}
+    <div class="mh1">③ the output sums them, weighted by cos(2ψ<sub>j</sub>+φ₁):&nbsp; out<sub>x</sub> = Σ<sub>j</sub> cos(2ψ<sub>j</sub>+φ₁)·h<sub>j</sub>. Substitute ① and each harmonic band adds up on its own:</div>
+    <table class="mbands"><tr><th>harmonic band</th><th>its 5 weighted terms, summed across the neurons</th><th>Σ</th><th>fate</th></tr>
+      ${band("constant","× 1/π",dcT,Sc2,"cancels · lands on freq 2ψ · 2 ∤ 5",false)}
+      ${band("fundamental","× ½",fnT,Sf2,"cancels · freqs 1ψ, 3ψ · ∤ 5",false)}
+      ${band("octave","× 2/3π",ocT,So2,"SURVIVES · freq 0 ✓",true)}
+    </table>
+    <div class="mh2"><b>The gate: Σ<sub>j</sub> cos(n·ψ<sub>j</sub>) = 0 unless n ≡ 0 (mod 5).</b>
+      The constant and fundamental bands land on n ∈ {1, 2, 3} — never a multiple of 5 — so their five terms
+      <span style="color:#c22">cancel to zero</span> (watch the ± terms above sum to ≈ 0). Only the <b>octave</b>'s inner 2ψ<sub>j</sub>
+      is undone by the out-weight's own +2ψ<sub>j</sub>, reaching n = 0 — so its five terms stop cancelling and
+      <span style="color:#1b7f3b">reinforce</span>: (2/3π)·${So2.toFixed(3)} = (5/3π)·cos(2β+φ₁), the doubled point.
+      <span class="note">The only leak is the 8th harmonic (2 + 8 = 10 ≡ 0 mod 5 also resonates), coefficient −2/63π ≈ −0.010 — far too small to move the argmax. That is the ~1° miss.</span></div>
+  </div>`;
   // ── output plane: the real dossier locus (ellipse if cursed) + col_c + MLP output ──
   (function(){ const cx=165,cy=165,R=110;
     ctxMo.clearRect(0,0,330,330);
@@ -1266,22 +1299,31 @@ function drawMLP(){
     ctxMo.stroke();
     ctxMo.strokeStyle="#d62728"; ctxMo.lineWidth=1.7;               // col_c hollow (target)
     ctxMo.beginPath(); ctxMo.arc(cx+R*colc[0],cy-R*colc[1],8,0,TAU); ctxMo.stroke();
-    const mx=rc*Math.cos(oang), my=rc*Math.sin(oang);               // MLP output coords (at col_c's radius)
-    const px=cx+R*mx, py=cy-R*my;
-    ctxMo.strokeStyle="#111"; ctxMo.lineWidth=1.9; ctxMo.setLineDash(miss>5?[5,3]:[]);
-    ctxMo.beginPath(); ctxMo.moveTo(cx,cy); ctxMo.lineTo(px,py); ctxMo.stroke(); ctxMo.setLineDash([]);
+    const mx=MLPsc*oxr, my=MLPsc*oyr;               // TRUE MLP output — radius ρ=cos(Δ/2), NOT forced to 1
+    const px=cx+R*mx, py=cy-R*my, rout=Math.hypot(mx,my);
+    // solid ray to the true output (inside the circle), then a dashed continuation out to the
+    // unit circle along the SAME angle — that direction is what the readout actually scores
+    ctxMo.strokeStyle="#111"; ctxMo.lineWidth=1.9;
+    ctxMo.beginPath(); ctxMo.moveTo(cx,cy); ctxMo.lineTo(px,py); ctxMo.stroke();
+    ctxMo.strokeStyle="#9aa3b2"; ctxMo.setLineDash([4,3]);
+    ctxMo.beginPath(); ctxMo.moveTo(px,py); ctxMo.lineTo(cx+R*Math.cos(oang),cy-R*Math.sin(oang)); ctxMo.stroke(); ctxMo.setLineDash([]);
     ctxMo.fillStyle=miss<5?"#1b7f3b":"#c22"; ctxMo.beginPath(); ctxMo.arc(px,py,5,0,TAU); ctxMo.fill();
-    ctxMo.font="11px sans-serif";
-    if(miss<5){   // landed — one combined label
-      ctxMo.fillStyle="#1b7f3b";
-      ctxMo.fillText(`MLP out = col_${c} (${mx.toFixed(2)}, ${my.toFixed(2)}) ✓`,
-        Math.min(px+9,110), py+(my>0?-7:17));
-    } else {      // drifted — two separate labels at their own spots
-      ctxMo.fillStyle="#111";
-      ctxMo.fillText(`MLP out (${mx.toFixed(2)}, ${my.toFixed(2)})`, Math.min(px+7,150), py+(my>0?-5:15));
-      ctxMo.fillStyle="#c22";
-      ctxMo.fillText(`col_${c} (${colc[0].toFixed(2)}, ${colc[1].toFixed(2)})`,
-        Math.min(cx+R*colc[0]+11,150), cy-R*colc[1]+(colc[1]>0?-5:15));
+    ctxMo.font="11px sans-serif"; ctxMo.fillStyle="#111";
+    ctxMo.fillText(`MLP out (${mx.toFixed(2)}, ${my.toFixed(2)}) · |·|=${rout.toFixed(2)}`,
+      Math.min(px+8,116), py+(my>0?-6:16));
+    ctxMo.fillStyle=miss<5?"#1b7f3b":"#c22";
+    ctxMo.fillText(`col_${c} (${colc[0].toFixed(2)}, ${colc[1].toFixed(2)})${miss<5?" — same angle ✓":""}`,
+      Math.min(cx+R*colc[0]+11,116), cy-R*colc[1]+(colc[1]>0?-6:16));
+    // the angular discrepancy itself: a red arc from col_c's angle to the output's angle,
+    // labeled in degrees — or a green ✓ when they coincide (angle is all the readout reads)
+    { const dS=((oang-cang+Math.PI)%TAU+TAU)%TAU-Math.PI, rr=R*0.58;
+      if(miss<5){ ctxMo.fillStyle="#1b7f3b"; ctxMo.font="bold 24px sans-serif";
+        ctxMo.fillText("✓", cx+rr*Math.cos(cang)-8, cy-rr*Math.sin(cang)+8); }
+      else { ctxMo.strokeStyle="#c22"; ctxMo.lineWidth=2; ctxMo.beginPath();
+        for(let s=0;s<=1;s+=0.04){ const ang=cang+dS*s, X=cx+rr*Math.cos(ang), Y=cy-rr*Math.sin(ang); s?ctxMo.lineTo(X,Y):ctxMo.moveTo(X,Y); }
+        ctxMo.stroke();
+        const midA=cang+dS/2; ctxMo.fillStyle="#c22"; ctxMo.font="bold 12px sans-serif";
+        ctxMo.fillText(`∠ ${miss.toFixed(1)}°`, cx+(rr+18)*Math.cos(midA)-14, cy-(rr+18)*Math.sin(midA)+4); }
     }
   })();
   $("Minfo").innerHTML=
@@ -1289,6 +1331,9 @@ function drawMLP(){
     its dial-angle β = <b>${beta.toFixed(3)}</b> rad · fired: <b>${h.filter(v=>v>1e-9).length}/5</b><br>
     doubled + phase-lock → output angle = <b>${oang.toFixed(3)}</b> rad &nbsp;·&nbsp; target col<sub>${c}</sub>
     at dial-angle <b>${cang.toFixed(3)}</b> rad<br>
+    output radius = |output| = <b>${Math.hypot(MLPsc*oxr,MLPsc*oyr).toFixed(3)}</b> = ρ = |½(col<sub>a</sub>+col<sub>b</sub>)|
+    = cos(Δ/2) — the half-angle shrink rides through the doubling (ReLU is positively homogeneous), so it lands
+    <i>inside</i> the circle, not on it; the readout scores by <b>angle</b>, so radius ≠ 1 is fine.<br>
     miss = <b style="color:${miss<5?'#1b7f3b':'#c22'}">${miss.toFixed(1)}°</b> —
     ${miss<5?"lands ✓ (orthonormal embedding: the input is a true circle point; the phase-lock aligns the two frames)":
       "drifts ✗ (cursed embedding: the input is an ellipse point these fixed neurons can't un-shear — orthonormality is what the doubler needs)"}<br>
