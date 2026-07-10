@@ -251,6 +251,290 @@ into their own frequency-{best_k} plane (grey: ideal pegs):</p>
 </div>"""
 
 
+def build_jspace_lab(d: Path) -> str:
+    """The intervention lab: the real trained block runs IN THE PAGE (JS forward
+    from posemb-out, validated against the C++ dumps), so lens-row injection,
+    embedding swaps, and J-space ablation happen live with sliders."""
+    import struct
+
+    snap = d / "snaps" / "snap_9999.bin"
+    jl = d / "jlens" / "jlens_9999.bin"
+    if not (snap.exists() and jl.exists()):
+        return ""
+
+    weights = np.fromfile(snap, dtype=np.float32)
+
+    # boundary-2 mean lens + three golden (idx, logits) pairs for the in-page check
+    buf = jl.read_bytes()
+    off = 24
+    lens2 = None
+    for _ in range(4):
+        bidx, tg, ac = struct.unpack_from("<QQQ", buf, off)
+        off += 24
+        block = np.frombuffer(buf, dtype=np.float32, count=tg * ac + tg + 2, offset=off)
+        if bidx == 2:
+            lens2 = block[:tg * ac].copy()
+        off += 4 * (tg * ac + tg + 2)
+    nctx = struct.unpack_from("<Q", buf, off)[0]
+    off += 8
+    fit_idx = np.frombuffer(buf, dtype=np.uint32, count=nctx, offset=off)
+    off += 8 * nctx
+    rec = 3 * 3 * 128 + 128 + P
+    golds = []
+    for i in (0, nctx // 2, nctx - 1):
+        r = np.frombuffer(buf, dtype=np.float32, count=rec, offset=off + i * 4 * rec)
+        golds.append((int(fit_idx[i]), r[3 * 3 * 128 + 128:]))
+    gold_js = "[" + ",".join(
+        f"{{idx:{gi},lg:dec32('{b64(gl.astype(np.float32))}')}}" for gi, gl in golds) + "]"
+
+    return f"""
+<div class='card' id='jspacelab'><h2>The intervention lab — steer the real model by hand</h2>
+<p class='sub'>The trained network's final block runs <b>live in this page</b> (the forward
+pass from the fully-embedded latent h₂ to the logits, real weights, verified against the
+training dumps — see the check at the bottom). The lens L₂ = E<sub>contexts</sub>[∂logits/∂h₂]
+was fit over 256 contexts; its 113 rows — one per candidate answer — are drawn below.
+<b>Inject</b>: click a row c, slide α: h₂ ← h₂ + α·‖h₂‖·v̂<sub>c</sub>, and the model answers c
+(~99% of contexts at α=1) even though a+b says otherwise. <b>Swap</b>: replace a's embedding
+with a′ inside the latent — the answer moves to (a′+b) mod 113 every time: the circles are
+causal. <b>Ablate</b>: greedily find the k lens atoms that best explain this h₂ (matching
+pursuit) and delete its projection onto them. The 113 rows are massively redundant — they
+live on circles inside the ~8-dimensional circuit subspace (the effective-rank result,
+wearing a new hat) — so k≈16 removes the planes the winding lives on and the model is lost,
+while removing 16 <i>random</i> directions (control button) does nothing.</p>
+<div class='ctl'>a <input type='range' id='Ja' min='0' max='112' value='9'>
+ <span class='val' id='JaV'>9</span>
+ &nbsp; b <input type='range' id='Jb' min='0' max='112' value='38'>
+ <span class='val' id='JbV'>38</span>
+ &nbsp;&nbsp; <button class='jmode on' data-m='inject'>inject</button><button class='jmode'
+ data-m='swap'>swap</button><button class='jmode' data-m='ablate'>ablate</button></div>
+<div class='ctl' id='JctlInject'>target c: <b><span id='JcV'>87</span></b> (click a lens row)
+ &nbsp; α <input type='range' id='Jalpha' min='0' max='200' value='100'>
+ <span class='val' id='JalphaV'>1.00</span></div>
+<div class='ctl' id='JctlSwap' style='display:none'>a′ <input type='range' id='Jap' min='0' max='112' value='61'>
+ <span class='val' id='JapV'>61</span></div>
+<div class='ctl' id='JctlAblate' style='display:none'>k <input type='range' id='Jk' min='0' max='16' value='8'>
+ <span class='val' id='JkV'>8</span> atoms
+ &nbsp; <label><input type='checkbox' id='Jrand'> remove k <i>random</i> directions instead (control)</label></div>
+<div id='Jeq' style='font-family:ui-monospace,monospace;font-size:13px;margin:8px 0;padding:7px 10px;
+ background:#f2f4f8;border-radius:6px'></div>
+<h4>The lens matrix L₂ — 113 rows (candidate answers) × 384 dims (3 slots × 128)</h4>
+<canvas id='Jlens' width='1140' height='226' style='cursor:pointer'></canvas>
+<h4>Logits — grey: untouched model · colored: after your edit</h4>
+<canvas id='Jlogits' width='1140' height='260'></canvas>
+<div id='Jverdict' style='font-weight:640;margin:6px 0'></div>
+<div class='sub' id='Jcheck'></div>
+</div>
+<style>.jmode{{border:1px solid #b9c3d4;background:#fff;padding:4px 14px;cursor:pointer;
+font-size:13px}}.jmode.on{{background:#2b3f63;color:#fff;border-color:#2b3f63}}
+.jmode:first-of-type{{border-radius:6px 0 0 6px}}.jmode:last-of-type{{border-radius:0 6px 6px 0}}</style>
+<script>
+(function(){{
+function dec32(s){{const b=atob(s),u=new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return new Float32Array(u.buffer);}}
+const P=113,V=114,SEQ=3,E=128,H=4,HD=32,F=512,D2=SEQ*E;
+const flat=dec32('{b64(weights)}');
+const L2=dec32('{b64(lens2.astype(np.float32))}');
+const GOLD={gold_js};
+const sizes=[14592,128,384,128,128,16384,16384,16384,16384,128,128,65536,512,65536,128,14464,113];
+const offs=[];{{let o=0;for(const s of sizes){{offs.push(o);o+=s;}}}}
+const T=i=>flat.subarray(offs[i],offs[i]+sizes[i]);
+const W={{embW:T(0),embB:T(1),pos:T(2),ln1g:T(3),ln1b:T(4),wq:T(5),wk:T(6),wv:T(7),wo:T(8),
+ln2g:T(9),ln2b:T(10),w1:T(11),b1:T(12),w2:T(13),b2:T(14),wu:T(15),bu:T(16)}};
+
+function ln(src,g,b){{const out=new Float64Array(D2);
+  for(let s=0;s<SEQ;++s){{let m=0;for(let e=0;e<E;++e)m+=src[s*E+e];m/=E;
+    let v=0;for(let e=0;e<E;++e){{const c=src[s*E+e]-m;v+=c*c;}}
+    const is=1/Math.sqrt(v/E+1e-8);
+    for(let e=0;e<E;++e)out[s*E+e]=(src[s*E+e]-m)*is*g[e]+b[e];}}
+  return out;}}
+function forwardFromB2(h2){{
+  const h=Float64Array.from(h2);
+  {{const u=ln(h,W.ln1g,W.ln1b);
+    const q=new Float64Array(SEQ*H*HD),k=new Float64Array(SEQ*H*HD),v=new Float64Array(SEQ*H*HD);
+    for(let s=0;s<SEQ;++s)for(let hh=0;hh<H;++hh)for(let d=0;d<HD;++d){{
+      let sq=0,sk=0,sv=0;const wo=(hh*HD+d)*E;
+      for(let e=0;e<E;++e){{const x=u[s*E+e];sq+=x*W.wq[wo+e];sk+=x*W.wk[wo+e];sv+=x*W.wv[wo+e];}}
+      const o=(s*H+hh)*HD+d;q[o]=sq;k[o]=sk;v[o]=sv;}}
+    const inv=1/Math.sqrt(HD),att=new Float64Array(H*SEQ*SEQ);
+    for(let hh=0;hh<H;++hh)for(let qq=0;qq<SEQ;++qq){{
+      const row=new Float64Array(SEQ);let mx=-1e30;
+      for(let kk=0;kk<SEQ;++kk){{let sc=0;
+        for(let d=0;d<HD;++d)sc+=q[(qq*H+hh)*HD+d]*k[(kk*H+hh)*HD+d];
+        row[kk]=sc*inv;if(row[kk]>mx)mx=row[kk];}}
+      let z=0;for(let kk=0;kk<SEQ;++kk){{row[kk]=Math.exp(row[kk]-mx);z+=row[kk];}}
+      for(let kk=0;kk<SEQ;++kk)att[(hh*SEQ+qq)*SEQ+kk]=row[kk]/z;}}
+    for(let s=0;s<SEQ;++s)for(let e=0;e<E;++e){{let sum=0;
+      for(let hh=0;hh<H;++hh)for(let d=0;d<HD;++d){{let a=0;
+        for(let kk=0;kk<SEQ;++kk)a+=att[(hh*SEQ+s)*SEQ+kk]*v[(kk*H+hh)*HD+d];
+        sum+=a*W.wo[(e*H+hh)*HD+d];}}
+      h[s*E+e]+=sum;}}}}
+  {{const u=ln(h,W.ln2g,W.ln2b);
+    for(let s=0;s<SEQ;++s){{const hid=new Float64Array(F);
+      for(let f=0;f<F;++f){{let sum=W.b1[f];
+        for(let e=0;e<E;++e)sum+=W.w1[f*E+e]*u[s*E+e];hid[f]=sum>0?sum:0;}}
+      for(let e=0;e<E;++e){{let sum=W.b2[e];
+        for(let f=0;f<F;++f)sum+=W.w2[e*F+f]*hid[f];h[s*E+e]+=sum;}}}}}}
+  const lg=new Float64Array(P);
+  for(let c=0;c<P;++c){{let sum=W.bu[c];
+    for(let e=0;e<E;++e)sum+=W.wu[c*E+e]*h[2*E+e];lg[c]=sum;}}
+  return lg;}}
+function h2From(a,b){{const h=new Float64Array(D2);const tok=[a,b,P];
+  for(let s=0;s<SEQ;++s)for(let e=0;e<E;++e)
+    h[s*E+e]=W.embW[e*V+tok[s]]+W.embB[e]+W.pos[s*E+e];
+  return h;}}
+
+// unit lens atoms
+const atoms=new Float64Array(P*D2);
+for(let c=0;c<P;++c){{let n=0;
+  for(let i=0;i<D2;++i)n+=L2[c*D2+i]*L2[c*D2+i];n=Math.sqrt(n)+1e-30;
+  for(let i=0;i<D2;++i)atoms[c*D2+i]=L2[c*D2+i]/n;}}
+
+function mpPicks(h,kmax){{const r=Float64Array.from(h),picks=[];
+  for(let k=0;k<kmax;++k){{let best=-1,bd=0;
+    for(let c=0;c<P;++c){{let d=0;
+      for(let i=0;i<D2;++i)d+=r[i]*atoms[c*D2+i];
+      if(d>bd){{bd=d;best=c;}}}}
+    if(best<0||bd<1e-6)break;
+    picks.push(best);
+    for(let i=0;i<D2;++i)r[i]-=bd*atoms[best*D2+i];}}
+  return picks;}}
+function removeSpan(h,dirs){{const basis=[];
+  for(const dsrc of dirs){{const u=Float64Array.from(dsrc);
+    for(const bv of basis){{let d=0;
+      for(let i=0;i<D2;++i)d+=u[i]*bv[i];
+      for(let i=0;i<D2;++i)u[i]-=d*bv[i];}}
+    let n=0;for(let i=0;i<D2;++i)n+=u[i]*u[i];n=Math.sqrt(n);
+    if(n<1e-4)continue;
+    for(let i=0;i<D2;++i)u[i]/=n;basis.push(u);}}
+  const out=Float64Array.from(h);
+  for(const bv of basis){{let d=0;
+    for(let i=0;i<D2;++i)d+=out[i]*bv[i];
+    for(let i=0;i<D2;++i)out[i]-=d*bv[i];}}
+  return out;}}
+
+// deterministic random dirs for the ablate control
+function randDirs(k){{let seed=1234;const rnd=()=>{{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff-0.5;}};
+  const dirs=[];for(let j=0;j<k;++j){{const u=new Float64Array(D2);
+    for(let i=0;i<D2;++i)u[i]=rnd();dirs.push(u);}}
+  return dirs;}}
+
+// ── state + UI ───────────────────────────────────────────────────────────────
+const S={{a:9,b:38,mode:'inject',c:87,alpha:1.0,ap:61,k:8,rand:false}};
+const $=id=>document.getElementById(id);
+
+// lens heatmap (draw once to an offscreen image, redraw with row highlight)
+const lc=$('Jlens'),lctx=lc.getContext('2d');
+const cw=lc.width/D2, chh=lc.height/P;
+let lensImg=null;
+function drawLensBase(){{
+  let mx=0;for(let i=0;i<P*D2;++i)mx=Math.max(mx,Math.abs(L2[i]));
+  for(let c=0;c<P;++c)for(let i=0;i<D2;++i){{
+    const v=L2[c*D2+i]/mx, t=Math.max(-1,Math.min(1,v*3));
+    lctx.fillStyle=t>=0?`rgba(180,40,50,${{t}})`:`rgba(40,80,180,${{-t}})`;
+    lctx.fillRect(i*cw,c*chh,Math.ceil(cw),Math.ceil(chh));}}
+  lensImg=lctx.getImageData(0,0,lc.width,lc.height);}}
+function drawLens(){{lctx.putImageData(lensImg,0,0);
+  lctx.strokeStyle='#111';lctx.lineWidth=1.5;
+  lctx.strokeRect(0,S.c*chh-1,lc.width,chh+2);
+  lctx.fillStyle='#111';lctx.font='11px sans-serif';
+  lctx.fillText('c='+S.c,4,Math.max(10,S.c*chh-3));
+  for(let s=1;s<SEQ;++s){{lctx.strokeStyle='rgba(0,0,0,.25)';lctx.lineWidth=1;
+    lctx.beginPath();lctx.moveTo(s*E*cw,0);lctx.lineTo(s*E*cw,lc.height);lctx.stroke();}}
+  lctx.fillStyle='#555';lctx.font='10px sans-serif';
+  lctx.fillText('a-slot',8,lc.height-4);lctx.fillText('b-slot',E*cw+8,lc.height-4);
+  lctx.fillText('=-slot',2*E*cw+8,lc.height-4);}}
+lc.addEventListener('click',ev=>{{const r=lc.getBoundingClientRect();
+  S.c=Math.max(0,Math.min(P-1,Math.floor((ev.clientY-r.top)*(lc.height/r.height)/chh)));
+  $('JcV').textContent=S.c;update();}});
+
+function edited(){{
+  const h=h2From(S.a,S.b);
+  if(S.mode==='inject'){{let n=0;for(let i=0;i<D2;++i)n+=h[i]*h[i];n=Math.sqrt(n);
+    const out=Float64Array.from(h);
+    for(let i=0;i<D2;++i)out[i]+=S.alpha*n*atoms[S.c*D2+i];
+    return {{h:out,eq:`h₂ ← h₂ + α·‖h₂‖·v̂_c    (α = ${{S.alpha.toFixed(2)}},  ‖h₂‖ = ${{n.toFixed(1)}},  c = ${{S.c}})`,
+      target:S.c,tname:'your target c'}};}}
+  if(S.mode==='swap'){{const out=Float64Array.from(h);
+    for(let e=0;e<E;++e)out[e]+=W.embW[e*V+S.ap]-W.embW[e*V+S.a];
+    return {{h:out,eq:`h₂[a-slot] ← h₂[a-slot] − E[${{S.a}}] + E[${{S.ap}}]    (predict: (${{S.ap}}+${{S.b}}) mod 113 = ${{(S.ap+S.b)%P}})`,
+      target:(S.ap+S.b)%P,tname:'(a′+b) mod 113'}};}}
+  // ablate
+  const dirs=S.rand?randDirs(S.k)
+    :mpPicks(h,S.k).map(c=>atoms.subarray(c*D2,(c+1)*D2));
+  const out=removeSpan(h,dirs);
+  return {{h:out,eq:S.rand
+    ?`h₂ ← h₂ − proj onto ${{S.k}} RANDOM orthonormal directions (control)`
+    :`h₂ ← h₂ − Σᵢ ⟨h₂,uᵢ⟩uᵢ    (uᵢ = Gram–Schmidt of h₂'s own top-${{S.k}} lens atoms)`,
+    target:null,tname:''}};}}
+
+const gc=$('Jlogits'),gctx=gc.getContext('2d');
+function drawLogits(base,ed,target){{
+  gctx.clearRect(0,0,gc.width,gc.height);
+  const all=[...base,...ed];
+  const mn=Math.min(...all),mx=Math.max(...all),pad=24;
+  const y=v=>gc.height-14-(v-mn)/(mx-mn+1e-9)*(gc.height-30);
+  const xw=(gc.width-pad)/P;
+  const ans=(S.a+S.b)%P;
+  let am=0,bm=0;
+  for(let c=0;c<P;++c){{if(ed[c]>ed[am])am=c;if(base[c]>base[bm])bm=c;}}
+  for(let c=0;c<P;++c){{const x=pad+c*xw;
+    gctx.fillStyle='rgba(120,120,120,.35)';
+    gctx.fillRect(x,y(base[c]),Math.max(1,xw-1.5),gc.height-14-y(base[c]));
+    gctx.fillStyle=c===am?'#c33939':'#4c78a8';
+    gctx.fillRect(x+xw*0.25,y(ed[c]),Math.max(1,xw*0.5),gc.height-14-y(ed[c]));}}
+  const mark=(c,col,lab,dy)=>{{const x=pad+c*xw+xw/2;
+    gctx.strokeStyle=col;gctx.lineWidth=1.4;gctx.setLineDash([4,3]);
+    gctx.beginPath();gctx.moveTo(x,10);gctx.lineTo(x,gc.height-14);gctx.stroke();
+    gctx.setLineDash([]);gctx.fillStyle=col;gctx.font='11px sans-serif';
+    gctx.fillText(lab,Math.min(x+3,gc.width-90),dy);}};
+  mark(ans,'#2c8a3d','(a+b) mod 113 = '+ans,20);
+  if(target!==null&&target!==ans)mark(target,'#c33939','target = '+target,34);
+  return {{am,bm}};}}
+
+function update(){{
+  ['Inject','Swap','Ablate'].forEach(m=>
+    $('Jctl'+m).style.display=S.mode===m.toLowerCase()?'':'none');
+  document.querySelectorAll('.jmode').forEach(bt=>
+    bt.classList.toggle('on',bt.dataset.m===S.mode));
+  const base=forwardFromB2(h2From(S.a,S.b));
+  const e=edited();
+  const lg=forwardFromB2(e.h);
+  $('Jeq').textContent=e.eq;
+  const {{am}}=drawLogits(base,lg,e.target);
+  const ans=(S.a+S.b)%P;
+  let msg=`model now says <b style='color:${{am===ans?'#2c8a3d':'#c33939'}}'>${{am}}</b>`;
+  msg+=` &nbsp;(untouched answer: ${{ans}}`;
+  if(e.target!==null)msg+=`, ${{e.tname}}: ${{e.target}} ${{am===e.target?'— <b>it moved</b> ✓':''}}`;
+  msg+=')';
+  $('Jverdict').innerHTML=msg;
+  drawLens();}}
+
+[['Ja','a',v=>{{S.a=v;$('JaV').textContent=v;}}],
+ ['Jb','b',v=>{{S.b=v;$('JbV').textContent=v;}}],
+ ['Jap','ap',v=>{{S.ap=v;$('JapV').textContent=v;}}],
+ ['Jk','k',v=>{{S.k=v;$('JkV').textContent=v;}}]].forEach(([id,,fn])=>
+  $(id).addEventListener('input',ev=>{{fn(+ev.target.value);update();}}));
+$('Jalpha').addEventListener('input',ev=>{{S.alpha=+ev.target.value/100;
+  $('JalphaV').textContent=S.alpha.toFixed(2);update();}});
+$('Jrand').addEventListener('change',ev=>{{S.rand=ev.target.checked;update();}});
+document.querySelectorAll('.jmode').forEach(bt=>
+  bt.addEventListener('click',()=>{{S.mode=bt.dataset.m;update();}}));
+
+// self-check: in-page forward vs C++ training dumps
+{{let worst=0,ok=0;
+  for(const g of GOLD){{const a=Math.floor(g.idx/P),b=g.idx%P;
+    const lg=forwardFromB2(h2From(a,b));
+    let am=0,gm=0;
+    for(let c=0;c<P;++c){{worst=Math.max(worst,Math.abs(lg[c]-g.lg[c]));
+      if(lg[c]>lg[am])am=c;if(g.lg[c]>g.lg[gm])gm=c;}}
+    ok+=(am===gm)?1:0;}}
+  $('Jcheck').textContent=`live-model check: page forward vs training dump on ${{GOLD.length}} contexts — max |Δlogit| = ${{worst.toExponential(1)}}, argmax ${{ok}}/${{GOLD.length}} ${{ok===GOLD.length?'✓':'✗ MISMATCH'}}`;}}
+
+drawLensBase();update();
+}})();
+</script>"""
+
+
 def build_real_model() -> str:
     sizes = [int(x) for x in (V3 / "param_manifest.txt").read_text().split()]
     snaps = sorted(V3.glob("snaps/snap_*.bin"),
@@ -606,7 +890,8 @@ def main() -> int:
 
     sonify_runs = [("canonical (v3)", V3)] + [
         ("seed " + p.name.split("_")[1], p) for p in seed_dirs]
-    v3_html = (build_seed_state(V3) + build_seed_spectra(V3) + build_spectrum_sonifier(sonify_runs)
+    sonify_html = build_spectrum_sonifier(sonify_runs)
+    v3_html = (build_seed_state(V3) + build_seed_spectra(V3)
                + (build_seed_leverage(V3) if (V3 / "leverage_realized.bin").exists() else ""))
 
     real_html = build_real_model()
@@ -614,6 +899,10 @@ def main() -> int:
     jlens_html = build_jlens(V3)
     if jlens_html:
         print("j-lens section baked")
+
+    jspace_html = build_jspace_lab(V3)
+    if jspace_html:
+        print("intervention lab baked")
 
     # Rent-knob section — needs the wd_runs clean grid; skip gracefully without it.
     knob_html = ""
@@ -641,24 +930,26 @@ onto a small circuit of parameters. The algorithm being formed is geometric: num
 become points on circles, addition becomes rotation, and answers are read off by
 interference.</p></div>
 {real_html}
+{jspace_html}
 <div class='card' id='ens'><h2>Ensemble — 10 seeds, mean ± 1σ</h2>
 <p class='sub'>Left: raw training step. Right: grok-aligned — each run shifted so its own
 grok moment (peak validation-accuracy slope) sits at τ = 0. Alignment is per-run, which
 is why the transition stays sharp despite grok steps spanning {min(groks)}–{max(groks)}.</p>
 {ens_html}</div>
-<div class='card' id='gloss'><h2>Glossary</h2><dl class='gloss'>{gloss}</dl></div>
-{knob_html}
 <div class='card' id='v3'><h2>The instrumented run</h2>
 <p class='sub'>The canonical seed with the full instrument suite: crystallization and
 emergence, the embedding/unembedding spectral handshake, and leverage — realized
 per-parameter influence against the architecture's structural prior.</p>
 {v3_html}</div>
+{knob_html}
+{sonify_html}
 {jlens_html}
 <p class='sub' style='margin-top:6px'>The two Fourier tools below are how the frequencies
 were <i>found</i> in these trained matrices, and why several of them make the logits sharp
 — the analysis lens for everything above.</p>
 {PAN3}
-{PAN4}"""
+{PAN4}
+<div class='card' id='gloss'><h2>Glossary</h2><dl class='gloss'>{gloss}</dl></div>"""
 
     html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>

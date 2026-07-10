@@ -74,6 +74,13 @@ site card in build_site.py, `nanda_jspace`):**
   top-16 J-space atoms → 8.6% acc (16 random dirs: 100%); a-slot embedding swap → answer
   moves to (a′+b) mod p **100%** — circles are causal. MP@readout: top-1 atom = answer
   100%, varexp 0.879 @ k=10.
+- **Intervention lab on the public site** (`build_jspace_lab` in tools/build_site.py):
+  the trained block runs LIVE in the page — JS ForwardFrom(posemb-out) with real weights
+  (snap_9999 + b2 mean lens baked as base64, ~1.5MB). Modes: inject (click lens row,
+  α slider), swap (a′ slider), ablate (top-k MP atoms + Gram-Schmidt removal, random
+  control checkbox). In-page self-check vs training dumps (6e-6). Validated headlessly
+  via `osascript -l JavaScript` + DOM shim (no node on this machine) — extract script
+  from built HTML, shim atob/document, drive S/update().
 - NeuralCompiler (`jlens_compiler.cpp`, report jlens_report.md): dispersion falls
   monotonically with depth 0.20→0.08; decoder depth table shows the answer forming
   (dec_in_0 structural guesses → dec_in_3 ≈ model); golden anchor 7e-7. NOTE: NC's
