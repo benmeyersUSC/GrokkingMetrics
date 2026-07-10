@@ -138,6 +138,119 @@ def project_coords(mat_gen: np.ndarray, k: int, points: np.ndarray,
     return np.stack([rr * np.cos(a2), rr * np.sin(a2)], axis=1).astype(np.float32), best[0]
 
 
+def build_jlens(d: Path) -> str:
+    """J-lens (Metric IV) card: dispersion through training, lens accuracy through
+    depth, and the circle-check of per-candidate lens rows. Reads the dumps
+    produced by ./nanda_jlens; returns "" gracefully if they are absent."""
+    files = sorted(d.glob("jlens/jlens_*.bin"),
+                   key=lambda p: int(re.search(r"jlens_(\d+)", p.name).group(1)))
+    if not files:
+        return ""
+    from jlens_analysis import read_jlens, boundary_circle, lens_logits, naive_logits
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    data = []
+    for p in files:
+        try:
+            data.append(read_jlens(p))
+        except Exception:
+            pass
+    steps = np.array([x["step"] for x in data])
+    sizes = [int(x) for x in (d / "param_manifest.txt").read_text().split()]
+    ks = [5, 8, 17, 49]
+
+    ei = data[0]["eval_idx"]
+    answers = ((ei // P) + (ei % P)) % P
+    disp = [x["bounds"][1]["dis"] for x in data]
+    accj, accn, errc = [], [], []
+    for x in data:
+        accj.append(float((lens_logits(x["bounds"][1]["lens"], x["eval_acts"][1])
+                           .argmax(1) == answers).mean()))
+        sp = d / "snaps" / f"snap_{int(x['step'])}.bin"
+        if sp.exists():
+            un = read_snap_weights(sp, sizes)[1]
+            accn.append(float((naive_logits(un, x["eval_acts"][1], 1)
+                               .argmax(1) == answers).mean()))
+        else:
+            accn.append(np.nan)
+        errc.append(float(np.mean([boundary_circle(x["bounds"][1]["lens"], 1, k)[1]
+                                   for k in ks])))
+    accm = [float((x["eval_logits"].argmax(1) == answers).mean()) for x in data]
+    _, _, grok, _ = run_curves(d)
+
+    fig = make_subplots(rows=1, cols=3, horizontal_spacing=0.07,
+                        specs=[[{"secondary_y": True}, {}, {}]],
+                        subplot_titles=("lens dispersion (embed boundary)",
+                                        "who knows the answer?",
+                                        "circle error of lens rows"))
+    fig.add_trace(go.Scatter(x=steps, y=disp, name="dispersion 1−‖E[L]‖²/E[‖L‖²]",
+                             line=dict(color="#4c78a8", width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=steps, y=accm, name="val acc (model, eval ctxs)",
+                             line=dict(color="#bbb", dash="dot")),
+                  row=1, col=1, secondary_y=True)
+    fig.add_trace(go.Scatter(x=steps, y=accm, name="the model", showlegend=False,
+                             line=dict(color="#222", width=3)), row=1, col=2)
+    fig.add_trace(go.Scatter(x=steps, y=accj, name="mean J-lens @ embedding",
+                             line=dict(color="#4c78a8")), row=1, col=2)
+    fig.add_trace(go.Scatter(x=steps, y=accn, name="naive logit lens @ embedding",
+                             line=dict(color="#f58518", dash="dot")), row=1, col=2)
+    fig.add_trace(go.Scatter(x=steps, y=errc, name="mean angular err (rad, key ks)",
+                             line=dict(color="#54a24b", width=2)), row=1, col=3)
+    fig.add_hline(y=np.pi / 2, line_dash="dot", line_color="#bbb", row=1, col=3)
+    for c in (1, 2, 3):
+        fig.add_vline(x=grok, line_dash="dash", line_color="#d62728", row=1, col=c)
+    fig.update_yaxes(rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(range=[0, 1.02], row=1, col=1, secondary_y=True)
+    fig.update_yaxes(range=[-0.02, 1.02], row=1, col=2)
+    fig.update_yaxes(rangemode="tozero", row=1, col=3)
+    fig.update_layout(height=380, width=1280, hoverlabel=dict(namelength=-1),
+                      legend=dict(orientation="h", y=-0.22, font=dict(size=10)),
+                      margin=dict(t=40), plot_bgcolor="#f7f8fa")
+
+    # final-snapshot circle of the =-slot lens rows, best key frequency
+    final = data[-1]
+    best_k = min(ks, key=lambda k: boundary_circle(final["bounds"][1]["lens"], 1, k)[1])
+    coords, err, slot = boundary_circle(final["bounds"][1]["lens"], 1, best_k)
+    ideal = 2 * np.pi * best_k * np.arange(P) / P
+    figc = go.Figure()
+    figc.add_scatter(x=np.cos(ideal), y=np.sin(ideal), mode="markers",
+                     marker=dict(size=5, color="#ddd"), name="ideal pegs")
+    figc.add_scatter(x=coords[:, 0], y=coords[:, 1], mode="markers",
+                     marker=dict(size=6, color=np.arange(P), colorscale="Twilight",
+                                 showscale=False),
+                     name=f"lens rows ({slot}, k={best_k}, err {err:.2f} rad)")
+    figc.update_xaxes(scaleanchor="y", visible=False)
+    figc.update_yaxes(visible=False)
+    figc.update_layout(height=420, width=460, margin=dict(t=10, b=10),
+                       legend=dict(orientation="h", y=-0.05, font=dict(size=10)),
+                       plot_bgcolor="#f7f8fa")
+
+    return f"""
+<div class='card' id='jlens'><h2>The Jacobian lens — asking an activation what it will become</h2>
+<p class='sub'>Anthropic's J-lens (July 2026) asks, for an interior activation h at depth ℓ:
+if everything downstream were replaced by its <i>average linear map</i>
+L<sub>ℓ</sub> = E<sub>contexts</sub>[∂logits/∂h<sub>ℓ</sub>], what would the output be? We fit it
+exactly here — one backward pass per logit per context, per training snapshot (TTTN's
+<code>ActivationLens.hpp</code>; the familiar logit lens is the J = I special case). Because our
+input space is enumerable, we can also measure what the big models can't: the
+<b>dispersion</b> of per-context lenses around their mean — how much E[J] lies.
+<b>Left:</b> at the embedding boundary the dispersion climbs and <i>peaks at the grok</i>, then
+relaxes: per-context Jacobians are maximally diverse exactly at the transition.
+<b>Middle:</b> the mean embedding-boundary lens never picks answers — the b-dependence of
+∂logits/∂h<sub>a</sub> averages out (that missing energy <i>is</i> the dispersion) — while past
+the transformer block the downstream map is linear and the lens equals the model by
+construction. <b>Right:</b> yet the mean lens is not empty: its per-candidate rows land on the
+circuit's key-frequency circles (angular error → ~0.1 rad through the grok) — the frozen
+unembedding circle, transported back through the value path to the embedding boundary. The
+lens learns the candidate <i>geometry</i> even while answer <i>selection</i> stays context-borne.</p>
+{fig.to_html(include_plotlyjs=False, full_html=False)}
+<p class='sub'>The =-slot rows of the final mean lens at the embedding boundary, projected
+into their own frequency-{best_k} plane (grey: ideal pegs):</p>
+{figc.to_html(include_plotlyjs=False, full_html=False)}
+</div>"""
+
+
 def build_real_model() -> str:
     sizes = [int(x) for x in (V3 / "param_manifest.txt").read_text().split()]
     snaps = sorted(V3.glob("snaps/snap_*.bin"),
@@ -498,6 +611,10 @@ def main() -> int:
 
     real_html = build_real_model()
 
+    jlens_html = build_jlens(V3)
+    if jlens_html:
+        print("j-lens section baked")
+
     # Rent-knob section — needs the wd_runs clean grid; skip gracefully without it.
     knob_html = ""
     if (ROOT / "wd_runs" / "clean_grid_summary.json").exists():
@@ -536,6 +653,7 @@ is why the transition stays sharp despite grok steps spanning {min(groks)}–{ma
 emergence, the embedding/unembedding spectral handshake, and leverage — realized
 per-parameter influence against the architecture's structural prior.</p>
 {v3_html}</div>
+{jlens_html}
 <p class='sub' style='margin-top:6px'>The two Fourier tools below are how the frequencies
 were <i>found</i> in these trained matrices, and why several of them make the logits sharp
 — the analysis lens for everything above.</p>

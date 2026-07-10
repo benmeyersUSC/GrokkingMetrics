@@ -47,6 +47,39 @@ Ben iterates by using it; first passes don't need to be perfect.
    alignment conditions across layers; why readout planes may differ from embedding
    planes; logit scale/temperature.
 
+## J-lens workstream (2026-07-09/10 — BUILT, all four phases)
+
+Anthropic's Jacobian lens (transformer-circuits.pub/2026/workspace) implemented in TTTN
+and applied here + NeuralCompiler. `L_ℓ = E[∂logits/∂h_ℓ]` fit by backprop of one-hot
+logit cotangents (`BackwardRange` returns the interior grad); logit lens = J=I special
+case. Core: TTTN `src/ActivationLens.hpp` (FitActivationLens, ApplyLens, LensVector,
+ActivationLensAccumulator with accord-style dispersion 1−‖E[L]‖²/E[‖L‖²]) +
+`ForwardFrom<Batch,I>` on BlockSequence/TTN + `ForwardInterior`/`BackwardInterior` on
+EncoderDecoderBlock; golden tests in TTTN `tests/activation_lens_test.cpp` (8/8).
+
+**Results (v3, this repo — `nanda_jlens`, `tools/jlens_analysis.py` → jlens.html,
+site card in build_site.py, `nanda_jspace`):**
+- Structural identities: lens(embed-out) ≡ lens(posemb-out) (posemb backward = identity);
+  boundaries 3/4 have LINEAR downstream → dispersion ≡ 0, lens ≡ model (golden anchor,
+  checked every snapshot; readout lens ≡ W_U to 1.5e-8).
+- **Dispersion at the embedding boundary PEAKS at the grok** (0.52→0.82 @ ~1760, relaxes
+  to ~0.55): per-context Jacobians maximally diverse at the transition (not a collapse —
+  a peak; refine hypothesis).
+- Mean embedding-boundary lens is answer-blind (b-dependence of ∂logits/∂h_a averages
+  out — that energy IS the dispersion), yet its per-candidate =-slot rows crystallize
+  onto circuit-frequency circles (angular err 1.01→0.10 rad by step 2500): the frozen
+  unembedding circle transported back through the value path.
+- **J-space interventions @ posemb-out (nonlinear downstream)**: inject α·‖h‖·v̂_c moves
+  the answer to arbitrary c 82%@α=.5, 98.8%@α=1 (random dir ≤0.6%); ablating h's own
+  top-16 J-space atoms → 8.6% acc (16 random dirs: 100%); a-slot embedding swap → answer
+  moves to (a′+b) mod p **100%** — circles are causal. MP@readout: top-1 atom = answer
+  100%, varexp 0.879 @ k=10.
+- NeuralCompiler (`jlens_compiler.cpp`, report jlens_report.md): dispersion falls
+  monotonically with depth 0.20→0.08; decoder depth table shows the answer forming
+  (dec_in_0 structural guesses → dec_in_3 ≈ model); golden anchor 7e-7. NOTE: NC's
+  deps/TTTN is pinned to an OLD TTTN generation (BatchedForward-era); EncoderDecoder.hpp
+  is identical in both trees — keep edits mirrored.
+
 ## Commands
 
 ```

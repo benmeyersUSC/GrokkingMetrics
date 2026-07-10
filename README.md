@@ -24,8 +24,15 @@ nanda_net.hpp                  shared network definition (task, blocks, dataset)
 nanda_grokking.cpp             training runner — full instrumentation, snapshots, resumable
 nanda_leverage.cpp             structural potential (Metric III) + realized leverage +
                                top-param Jacobian columns per snapshot
+nanda_jlens.cpp                Jacobian lens (Metric IV) per snapshot: mean lens at every
+                               boundary + cross-context dispersion + acts/logits dumps
+nanda_jspace.cpp               J-space operations on a snapshot: matching pursuit,
+                               lens-direction inject, J-space ablation, embedding swap
 tools/
   grokking_crystallization.py  effective rank, embedding Fourier share, emergence R²
+  jlens_analysis.py            jlens.html: dispersion-through-training, lens accuracy
+                               vs the naive logit lens, disposition-through-depth,
+                               circle-check of per-candidate lens rows
   grokking_report.py           single-run report.html (all instruments, one time axis)
   grokking_ensemble.py         N-seed mean ± σ bands, step- and grok-aligned
   grokking_site.py             the dashboard: glossary + ensemble + per-seed deep dives
@@ -54,6 +61,11 @@ TTTN is pulled as a dependency into `deps/TTTN`:
 
 # leverage analysis over a run's retained snapshots
 ./nanda_leverage runs/seed_1
+
+# Jacobian lens per snapshot ([n_ctx] [every]) + report + interventions
+./nanda_jlens runs/seed_1 256 1
+python3 tools/jlens_analysis.py runs/seed_1        # jlens.html
+./nanda_jspace runs/seed_1 9999                    # MP / inject / ablate / swap
 
 # dashboards
 python3 tools/grokking_report.py runs/seed_1        # single-run report.html

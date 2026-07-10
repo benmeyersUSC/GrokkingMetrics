@@ -21,4 +21,10 @@ g++ $FLAGS nanda_grokking.cpp -framework Accelerate -o nanda_grokking
 echo "==> building nanda_leverage..."
 g++ $FLAGS nanda_leverage.cpp -framework Accelerate -o nanda_leverage
 
-echo "==> done: ./nanda_grokking  ./nanda_leverage"
+echo "==> building nanda_jlens..."
+g++ $FLAGS nanda_jlens.cpp -framework Accelerate -o nanda_jlens
+
+echo "==> building nanda_jspace..."
+g++ $FLAGS nanda_jspace.cpp -framework Accelerate -o nanda_jspace
+
+echo "==> done: ./nanda_grokking  ./nanda_leverage  ./nanda_jlens  ./nanda_jspace"
