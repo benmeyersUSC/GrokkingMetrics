@@ -81,3 +81,8 @@ crystal_cache.npz
 __pycache__/
 FOUR_ACTS_BRIEF.md
 CLAUDE.md
+# compiled analysis binaries + OS cruft
+nanda_jlens
+nanda_jspace
+nanda_jlens_split
+.DS_Store
