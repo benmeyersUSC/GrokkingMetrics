@@ -874,71 +874,35 @@ setTimeout(()=>{{computeBands();draw();drawTrain();}},60);
 
 
 def build_toylens() -> str:
-    """The J-lens on the IDEAL machine (toy mode): attention = pure transport
-    (chord midpoint), MLP = pure squaring, unembed = frozen rows. Everything is
-    closed form, so the lens phenomena become theorems: the mean lens at
-    attn-out is identically zero (E[J] of a squarer cancels), the per-context
-    lens disposition is exactly 2x the model output at every boundary (Euler's
-    homogeneous-function theorem), and the antipodal flips are uncensored.
-    The card ends with the ideal-vs-real table: the distance is the finding."""
+    """The J-lens on the two-dial machine (toy mode, single frequency, type
+    channel). No controls of its own: it reads Panel 6's sliders (a, b, k,
+    phases, gains, routing gamma) live, and shows the full 113x3 lens matrix of
+    the "=" latent at each depth, plus L.h against the true logits."""
     return """
-<div class='card' id='toylens'><h2>8 · The lens on the ideal machine — the theorem the real model deviates from</h2>
-<p class='sub'>Same instrument as the real-model experiment, applied to the <b>ideal</b>
-algorithm: embed on the circuit's four circles → attention = <b>pure transport</b> (the
-chord midpoint of Panel 7) → MLP = <b>pure squaring</b> (angle doubling) → frozen rows →
-interference. Because every stage is closed-form, the lens results here are not data —
-they are <b>derivations</b>: <b>(i)</b> the <b>mean lens at attn-out is exactly zero</b>.
-The sensitivity through a squarer is d(x²)/dx = 2x — proportional to the deposit itself —
-and deposits point everywhere on the circle, so E[J] ≡ 0. A pure-transport machine gives
-the mean lens <i>nothing</i> to read before the MLP: dispersion ≡ 1. <b>(ii)</b> the
-<b>per-context lens disposition is exactly 2× the model's own logits at every
-boundary</b> (the network is homogeneous of degree 2 in its state, so J·h = 2·F(h) —
-Euler's theorem): the teal line below is perfectly flat. <b>(iii)</b> antipodal same-class
-deposits are <b>uncensored</b>: the per-frequency plane cosines for (1,112) vs (56,57)
-are exactly (−1)<sup>k</sup> — no product channel exists to drown them. Your clean mental
-model is the theorem; the trained network is the experiment; <b>the lens measures the
-distance between them</b>, and that distance has a name: value-composition — the real
-attention pattern swings with content and leaks products, which is the only thing a mean
-lens can see at attn-out.</p>
-<div class='ctl'>pair 1: a <input type='range' id='Ta' min='0' max='112' value='12'>
- <span class='val' id='TaV'>12</span>
- b <input type='range' id='Tb' min='0' max='112' value='73'>
- <span class='val' id='TbV'>73</span>
- &nbsp;&nbsp; pair 2: a′ <input type='range' id='Ta2' min='0' max='112' value='80'>
- <span class='val' id='Ta2V'>80</span>
- b′ <input type='range' id='Tb2' min='0' max='112' value='5'>
- <span class='val' id='Tb2V'>5</span>
- &nbsp; <button id='Tsame' class='jmode'>make same-sum</button>
- &nbsp; <button id='Tanti' class='jmode'>antipodal exhibit (1,112)v(56,57)</button></div>
-<div id='Tverdict' style='font-weight:640;margin:6px 0'></div>
-<canvas id='Tchart' width='1140' height='330'></canvas>
-<div id='Ttable' style='margin-top:10px;overflow-x:auto'></div>
-<h4 style='margin-top:18px'>The lens object itself — the two-dial machine's full L, 113 × 3, at every depth of the "=" latent</h4>
-<p class='sub'>This is the lens of <b>the toy transformer of Panel 6</b> — d<sub>model</sub> = 3:
-two dials (x, y) plus the <b>type channel</b> (+1 for numbers, −1 for "="), one frequency
-k = 1, softmax attention that routes <i>by type</i> (W<sub>Q</sub>/W<sub>K</sub> read only t;
-W<sub>V</sub> passes only x, y), five ReLUs that double the angle, frozen candidate rows.
-L<sub>ℓ</sub> = ∂logits/∂h<sub>=</sub> at depth ℓ: <b>113 rows (candidate answers) × 3 columns
-(x, y, type)</b>, exact for this context. Watch the <b>live column migrate</b>: at
-<b>embed-out</b> the "="-latent's only causal channel is its <i>type</i> — that's what
-summons a and b — so the type column carries the routing sensitivity while x,y are nearly
-dead (the "=" token contributes ~0 value weight). After attention the roles flip
+<div class='card' id='toylens'><h2>8 · The lens on the two-dial machine — L, all of it, 113 × 3</h2>
+<p class='sub'>The Jacobian lens of <b>the machine you are driving in Panel 6</b> — same a,
+b, winding k, phases, gains, and routing γ; change them up there and this matrix follows.
+d<sub>model</sub> = 3: two dials (x, y) plus the <b>type channel</b> (+1 for numbers, −1 for
+"="). Attention routes <i>by type</i> (W<sub>Q</sub>/W<sub>K</sub> read only t;
+W<sub>V</sub> passes only x, y); five ReLUs double the angle; frozen candidate rows score.
+L<sub>ℓ</sub> = ∂logits/∂h<sub>=</sub> at depth ℓ: <b>113 rows (candidate answers) × 3
+columns (x, y, type)</b>, exact for this context. Watch the <b>live column migrate</b>:
+at <b>embed-out</b> the "="-latent's only causal channel is its <i>type</i> — the beacon
+that summons a and b — so the type column carries the routing sensitivity while x,y are
+nearly dead (the "=" token wins ~0 value weight). After attention the roles flip
 <i>exactly</i>: the type column is identically zero (nothing downstream reads it) and the
-x,y columns light up as sinusoids down the vocab axis — the frozen candidate circle,
-pulled back through the doubler. At <b>mlp-out/readout</b> the matrix freezes into the
-candidate rows themselves and stops depending on your sliders. And the <b>routing γ</b>
-slider replays a real finding: as the softmax saturates, ∂(weights)/∂(type) → 0 and the
-embed-out type column <i>dies</i> — a saturated router is invisible to gradients, which is
-precisely the attn.Q leverage suppression we measured in the trained net. Cursed phases
-(the Two-Dial Parable) bend the sinusoids into the elliptical junk — heal restores them.</p>
-<div class='ctl'>a <input type='range' id='Ua' min='0' max='112' value='81'><span class='val' id='UaV'>81</span>
- &nbsp; b <input type='range' id='Ub' min='0' max='112' value='41'><span class='val' id='UbV'>41</span>
- &nbsp; φ₁ <input type='range' id='Up1' min='0' max='628' value='0'><span class='val' id='Up1V'>0.00</span>
- &nbsp; φ₂ <input type='range' id='Up2' min='0' max='628' value='157'><span class='val' id='Up2V'>1.57</span>
- &nbsp; <button id='Uheal' class='jmode'>heal</button>
- &nbsp; routing γ <input type='range' id='Ugam' min='5' max='120' value='40'><span class='val' id='UgamV'>4.0</span></div>
+x,y columns light up as sinusoids down the vocab axis — the candidate circle pulled back
+through the doubler. At <b>mlp-out / readout</b> the matrix freezes into the candidate
+rows themselves — the lens IS the unembedding — and L·h ≡ the logits exactly (in fact
+already at attn-out: the ReLU doubler is degree-1 homogeneous, so Euler gives
+J·m = f(m) to machine precision). Panel 6's γ replays a trained-net finding: saturate the
+router and the embed-out type column <i>dies</i> — ∂(softmax)/∂(type) → 0; a saturated
+router is invisible to gradients, which is the attn.Q leverage suppression we measured in
+the real network. And the parable's cursed phases bend these row-sinusoids into the
+ellipse — heal up top, and watch the lens straighten.</p>
 <div class='ctl'>depth:
- <button class='jmode ub on' data-b='0'>embed-out</button><button class='jmode ub' data-b='1'>attn-out</button><button class='jmode ub' data-b='2'>mlp-out</button><button class='jmode ub' data-b='3'>readout (rows)</button></div>
+ <button class='jmode ub on' data-b='0'>embed-out</button><button class='jmode ub' data-b='1'>attn-out</button><button class='jmode ub' data-b='2'>mlp-out</button><button class='jmode ub' data-b='3'>readout (rows)</button>
+ &nbsp; <span id='Upar' style='color:#8a93a6;font-size:12.5px'></span></div>
 <div style='display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start'>
 <canvas id='Umat' width='430' height='470'></canvas>
 <canvas id='Uhvec' width='170' height='470'></canvas>
@@ -948,174 +912,70 @@ precisely the attn.Q leverage suppression we measured in the trained net. Cursed
 </div>
 <script>
 (function(){
-const P=113,TAU=Math.PI*2,KS=[5,8,17,49],NK=4,DIM=8;
+const P=113,TAU=Math.PI*2;
 const $=id=>document.getElementById(id);
-const th=(k,x)=>TAU*k*x/P;
-
-// ideal states per boundary: [embed(24), attn(24), mlp(24), readout(8), logits(113)]
-function states(a,b){
-  const aslot=new Float64Array(DIM),bslot=new Float64Array(DIM),
-        m=new Float64Array(DIM),z=new Float64Array(DIM);
-  for(let i=0;i<NK;++i){
-    const k=KS[i];
-    aslot[2*i]=Math.cos(th(k,a)); aslot[2*i+1]=Math.sin(th(k,a));
-    bslot[2*i]=Math.cos(th(k,b)); bslot[2*i+1]=Math.sin(th(k,b));
-    const mx=(aslot[2*i]+bslot[2*i])/2, my=(aslot[2*i+1]+bslot[2*i+1])/2;
-    m[2*i]=mx; m[2*i+1]=my;
-    z[2*i]=mx*mx-my*my; z[2*i+1]=2*mx*my;      // squaring: cos²Δ · e(2σ)
-  }
-  const cat=(x,y,w)=>{const o=new Float64Array(24);o.set(x,0);o.set(y,8);o.set(w,16);return o;};
-  const zero=new Float64Array(DIM);
-  const lg=new Float64Array(P);
-  for(let c=0;c<P;++c){let s=0;
-    for(let i=0;i<NK;++i){const k=KS[i];
-      s+=z[2*i]*Math.cos(th(k,c))+z[2*i+1]*Math.sin(th(k,c));}
-    lg[c]=s;}
-  return {h:[cat(aslot,bslot,zero),cat(aslot,bslot,m),cat(aslot,bslot,z),z,lg],
-          m,z,lg};
-}
-// per-context lens disposition at any boundary = 2·logits exactly (Euler, degree 2).
-function cosv(x,y){let d=0,nx=0,ny=0;
-  for(let i=0;i<x.length;++i){d+=x[i]*y[i];nx+=x[i]*x[i];ny+=y[i]*y[i];}
-  return d/(Math.sqrt(nx*ny)+1e-30);}
-
-// mean lens, computed honestly by averaging per-context Jacobians at attn-out
-// over a large sample (the derivation says exactly 0; the number verifies it).
-function meanLensAttnNorm(){
-  // E[m] over the FULL grid: for each i, mean of the midpoint components — the
-  // Jacobian of the squarer is linear in m, so E[J] reduces to J at E[m].
-  const mx=new Float64Array(NK),my=new Float64Array(NK); let cnt=0;
-  for(let a=0;a<P;++a)for(let b=0;b<P;++b){
-    for(let i=0;i<NK;++i){const k=KS[i];
-      mx[i]+=(Math.cos(th(k,a))+Math.cos(th(k,b)))/2;
-      my[i]+=(Math.sin(th(k,a))+Math.sin(th(k,b)))/2;}
-    ++cnt;}
-  let s=0;
-  for(let c=0;c<P;++c)for(let i=0;i<NK;++i){
-    const k=KS[i],rc=Math.cos(th(k,c)),rs=Math.sin(th(k,c));
-    const x=mx[i]/cnt,y=my[i]/cnt;
-    const u=2*(rc*x+rs*y),v=2*(-rc*y+rs*x);
-    s+=u*u+v*v;}
-  return Math.sqrt(s);
-}
-
-const S0={a:12,b:73,a2:80,b2:5};
-const LBL=['embed','attn-out (transport)','mlp-out (squared)','readout','logits'];
-const cv=$('Tchart'),cx=cv.getContext('2d');
-function draw(){
-  const s1=states(S0.a,S0.b),s2=states(S0.a2,S0.b2);
-  const S=[],Dm=[],Dp=[];
-  for(let l=0;l<5;++l)S.push(cosv(s1.h[l],s2.h[l]));
-  const dl=cosv(s1.lg,s2.lg);
-  for(let l=0;l<5;++l){Dp.push(dl);Dm.push(l>=2?dl:null);} // mean lens ≡0 before mlp-out
-  cx.clearRect(0,0,cv.width,cv.height);
-  const x0=60,x1=cv.width-20,y0=18,y1=cv.height-40,ymin=-1.05,ymax=1.05;
-  const X=l=>x0+(x1-x0)*l/4,Y=v=>y1-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y1-y0);
-  cx.strokeStyle='#ddd';
-  for(const g of [-1,-0.5,0,0.5,1]){cx.beginPath();cx.moveTo(x0,Y(g));cx.lineTo(x1,Y(g));cx.stroke();
-    cx.fillStyle='#999';cx.font='11px sans-serif';cx.fillText(g.toFixed(1),x0-32,Y(g)+4);}
-  cx.fillStyle='#555';
-  for(let l=0;l<5;++l)cx.fillText(LBL[l],X(l)-30,y1+16);
-  // hatched "mean lens ≡ 0" zone over embed..attn
-  cx.fillStyle='rgba(43,95,168,.06)';cx.fillRect(X(0),y0,X(1.5)-X(0),y1-y0);
-  cx.fillStyle='#2b5fa8';cx.font='11px sans-serif';
-  cx.fillText('mean lens ≡ 0 here (E[J] of a squarer cancels) — nothing to read',X(0)+6,y0+12);
-  const line=(v,col,w,dash)=>{cx.strokeStyle=col;cx.lineWidth=w;
-    if(dash)cx.setLineDash(dash);cx.beginPath();let pen=false;
-    for(let l=0;l<5;++l){if(v[l]===null){pen=false;continue;}
-      pen?cx.lineTo(X(l),Y(v[l])):cx.moveTo(X(l),Y(v[l]));pen=true;}
-    cx.stroke();cx.setLineDash([]);
-    for(let l=0;l<5;++l)if(v[l]!==null){cx.fillStyle=col;cx.beginPath();cx.arc(X(l),Y(v[l]),3.2,0,7);cx.fill();}};
-  line(S,'#dc8232',2.4);
-  line(Dp,'#1f9e89',2.8);
-  line(Dm,'#2b5fa8',2.8,[6,4]);
-  cx.font='12px sans-serif';
-  cx.fillStyle='#dc8232';cx.fillText('S(ℓ) — state cos (exact)',x0+8,y1-46);
-  cx.fillStyle='#1f9e89';cx.fillText('D per-context lens — flat ≡ cos(logits): J·h = 2F(h), Euler',x0+8,y1-30);
-  cx.fillStyle='#2b5fa8';cx.fillText('D mean lens — defined only once downstream is linear',x0+8,y1-14);
-  const sum1=(S0.a+S0.b)%P,sum2=(S0.a2+S0.b2)%P;
-  $('Tverdict').innerHTML=
-    `${S0.a}+${S0.b} ≡ <b>${sum1}</b> vs ${S0.a2}+${S0.b2} ≡ <b>${sum2}</b>`+
-    ` (${sum1===sum2?'<span style="color:#2c8a3d">same meaning</span>':'<span style="color:#c33939">different meaning</span>'})`+
-    ` · S(attn-out) = ${S[1].toFixed(3)} · cos(logits) = ${dl.toFixed(3)}`;
-  // per-frequency table for the current pair at attn-out
-  let rows='';
-  for(let i=0;i<NK;++i){
-    const k=KS[i];
-    const p1=[s1.m[2*i],s1.m[2*i+1]],p2=[s2.m[2*i],s2.m[2*i+1]];
-    const n1=Math.hypot(p1[0],p1[1]),n2=Math.hypot(p2[0],p2[1]);
-    const pc=(p1[0]*p2[0]+p1[1]*p2[1])/(n1*n2+1e-30);
-    rows+=`<tr><td>k=${k}</td><td>${n1.toFixed(3)}</td><td>${n2.toFixed(3)}</td>`+
-      `<td style="color:${pc<0?'#c33939':'#2c8a3d'};font-weight:640">${pc.toFixed(3)}</td></tr>`;
-  }
-  $('Ttable').innerHTML=
-    `<table style='border-collapse:collapse;font-size:13px'>`+
-    `<tr style='background:#f2f4f8'><th style='padding:4px 14px'>plane</th>`+
-    `<th style='padding:4px 14px'>|cosΔ| pair 1</th><th style='padding:4px 14px'>|cosΔ| pair 2</th>`+
-    `<th style='padding:4px 14px'>midpoint plane-cos</th></tr>${rows}</table>`+
-    `<p class='sub' style='margin-top:10px'><b>Ideal vs trained, at attn-out:</b> mean-lens
-     dispersion <b>1.000 (theorem)</b> vs <b>0.482 (measured)</b> — the trained net's mean
-     lens keeps ~52% of its Jacobian energy there, all of it attention's leaked products
-     (<code>tools/dissect_deposit.py</code>: gate-free read of the antipodal pair −0.51,
-     lens FFN-path +0.74). Same-class state cos here can reach −1 (uncensored flips);
-     the trained net's =-slot states bottom out near −0.56 for the same reason, but its
-     <i>disposition</i> floor stays at +0.71 — the product channel doesn't flip.</p>`;
-}
-// ── the two-dial machine's full lens L (113 × 3), per depth of the "=" latent ─
-const U={a:81,b:41,p1:0,p2:Math.PI/2,gam:4,depth:0};
 const MLPN=5,MLPS=3*Math.PI/5;
 const UPSI=[...Array(MLPN)].map((_,j)=>TAU*j/MLPN);
-function ucol(x){const t=TAU*x/P;
-  return [Math.cos(t-U.p1),Math.cos(t-U.p2)];}
-// forward from depth d with the "=" latent overridden by v (length 3; readout: 2)
-function ufwd(d,v){
-  let m,t=v[2];
-  if(d===0){ // embed-out: v = the "=" token's embedded latent; attention routes by type
-    const ca=ucol(U.a),cb=ucol(U.b);
-    const res=[[ca[0],ca[1],1],[cb[0],cb[1],1],[v[0],v[1],v[2]]];
-    // Q_= = (0,0,-gam*t_=); K_j = (0,0,t_j); score(=,j) = -gam*t_= * t_j / sqrt(3)
-    const sc=res.map(r=>(-U.gam*v[2])*r[2]/Math.sqrt(3));
-    const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
-    const w=e.map(x=>x/z);
-    m=[w[0]*res[0][0]+w[1]*res[1][0]+w[2]*res[2][0],
-       w[0]*res[0][1]+w[1]*res[1][1]+w[2]*res[2][1]];
-  } else m=[v[0],v[1]];
-  let o;
-  if(d<=1){ // through the 5-ReLU doubler (output phase-locked to phi1)
-    let ox=0,oy=0;
-    for(let j=0;j<MLPN;++j){
-      const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
-      ox+=h*Math.cos(2*UPSI[j]+U.p1);oy+=h*Math.sin(2*UPSI[j]+U.p1);}
-    o=[MLPS*ox/ (MLPN/2) ,MLPS*oy/(MLPN/2)];
-  } else o=m;
-  const lg=new Float64Array(P);
-  for(let c=0;c<P;++c){const rc=ucol(c);lg[c]=o[0]*rc[0]+o[1]*rc[1];}
-  return lg;
+let UD=0; // depth
+// read the machine's parameters from Panel 6's controls (fallbacks = healed ideal)
+function pget(){
+  const g=(id,dv,sc)=>{const e=$(id);return e?(+e.value)/(sc||1):dv;};
+  return {a:g('Fa',81),b:g('Fb',41),k:g('Fk',1),
+          p1:g('Fp1',0,100),p2:g('Fp2',Math.PI/2,100),
+          g1:g('Fg1',1,100),g2:g('Fg2',1,100),
+          gam:g('Fgam',4,10),
+          s2:($('Fs2')&&$('Fs2').checked)};
 }
-function ulatent(d){ // the actual "=" latent at depth d for the current context
-  if(d===0)return [0,0,-1];
-  const base=ufwdState();
-  if(d===1)return [base.m[0],base.m[1],-1];
-  return [base.o[0],base.o[1],-1];
-}
-function ufwdState(){
-  const ca=ucol(U.a),cb=ucol(U.b);
-  const sc=[U.gam/Math.sqrt(3),U.gam/Math.sqrt(3),-U.gam/Math.sqrt(3)];
+function ucol(x,pr){const t=TAU*((pr.k*x)%P)/P;
+  return [pr.g1*Math.cos(t-pr.p1),pr.g2*Math.cos(t-pr.p2)];}
+function ufwdState(pr){
+  const ca=ucol(pr.a,pr),cb=ucol(pr.b,pr);
+  const sc=[pr.gam/Math.sqrt(3),pr.gam/Math.sqrt(3),-pr.gam/Math.sqrt(3)];
   const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
   const w=e.map(x=>x/z);
   const m=[w[0]*ca[0]+w[1]*cb[0],w[0]*ca[1]+w[1]*cb[1]];
   let ox=0,oy=0;
   for(let j=0;j<MLPN;++j){
     const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
-    ox+=h*Math.cos(2*UPSI[j]+U.p1);oy+=h*Math.sin(2*UPSI[j]+U.p1);}
+    ox+=h*Math.cos(2*UPSI[j]+pr.p1);oy+=h*Math.sin(2*UPSI[j]+pr.p1);}
   return {m,o:[MLPS*ox/(MLPN/2),MLPS*oy/(MLPN/2)],w};
 }
-function ulens(d){ // exact-to-machine central differences over the 3 latent dims
+// forward from depth d with the "=" latent overridden by v
+function ufwd(d,v,pr){
+  let m;
+  if(d===0){
+    const ca=ucol(pr.a,pr),cb=ucol(pr.b,pr);
+    const res=[[ca[0],ca[1],1],[cb[0],cb[1],1],[v[0],v[1],v[2]]];
+    const sc=res.map(r=>(-pr.gam*v[2])*r[2]/Math.sqrt(3));
+    const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
+    const w=e.map(x=>x/z);
+    m=[w[0]*res[0][0]+w[1]*res[1][0]+w[2]*res[2][0],
+       w[0]*res[0][1]+w[1]*res[1][1]+w[2]*res[2][1]];
+  } else m=[v[0],v[1]];
+  let o;
+  if(d<=1){
+    let ox=0,oy=0;
+    for(let j=0;j<MLPN;++j){
+      const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
+      ox+=h*Math.cos(2*UPSI[j]+pr.p1);oy+=h*Math.sin(2*UPSI[j]+pr.p1);}
+    o=[MLPS*ox/(MLPN/2),MLPS*oy/(MLPN/2)];
+  } else o=m;
+  const lg=new Float64Array(P);
+  for(let c=0;c<P;++c){const rc=ucol(c,pr);lg[c]=o[0]*rc[0]+o[1]*rc[1];}
+  return lg;
+}
+function ulatent(d,pr){
+  if(d===0)return [0,0,-1];
+  const st=ufwdState(pr);
+  if(d===1)return [st.m[0],st.m[1],-1];
+  return [st.o[0],st.o[1],-1];
+}
+function ulens(d,pr){
   const cols=d===3?2:3;
-  const h0=d===3?ufwdState().o:ulatent(d);
+  const h0=d===3?ufwdState(pr).o:ulatent(d,pr);
   const L=new Float64Array(P*cols);
-  if(d>=2){ // downstream is the frozen rows (mlp-out passes o straight to readout)
-    for(let c=0;c<P;++c){const rc=ucol(c);
+  if(d>=2){
+    for(let c=0;c<P;++c){const rc=ucol(c,pr);
       L[c*cols]=rc[0];L[c*cols+1]=rc[1];if(cols===3)L[c*cols+2]=0;}
     return {L,cols,h:h0};
   }
@@ -1123,23 +983,31 @@ function ulens(d){ // exact-to-machine central differences over the 3 latent dim
   for(let j=0;j<3;++j){
     const vp=h0.slice(),vm=h0.slice();
     vp[j]+=eps;vm[j]-=eps;
-    const lp=ufwd(d,vp),lm=ufwd(d,vm);
+    const lp=ufwd(d,vp,pr),lm=ufwd(d,vm,pr);
     for(let c=0;c<P;++c)L[c*3+j]=(lp[c]-lm[c])/(2*eps);
   }
   return {L,cols:3,h:h0};
 }
 const UCOLS=['x (dial 1)','y (dial 2)','type'];
 function drawU(){
-  const d=U.depth,r=ulens(d);
+  const pr=pget();
   const mc=$('Umat').getContext('2d'),hc=$('Uhvec').getContext('2d'),lc=$('Ulh').getContext('2d');
   mc.clearRect(0,0,430,470);hc.clearRect(0,0,170,470);lc.clearRect(0,0,460,470);
+  if(pr.s2){
+    mc.font='13px sans-serif';mc.fillStyle='#8a93a6';
+    mc.fillText('the lens is drawn for the single-frequency 3-dim toy —',20,60);
+    mc.fillText('turn off “add second frequency” in Panel 6.',20,80);
+    $('Uinfo').innerHTML='';$('Upar').textContent='';return;
+  }
+  $('Upar').textContent='reading Panel 6: a='+pr.a+' b='+pr.b+' k='+pr.k+
+    ' φ=('+pr.p1.toFixed(2)+', '+pr.p2.toFixed(2)+') γ='+pr.gam.toFixed(1);
+  const d=UD,r=ulens(d,pr);
   const top=30,bot=452,cellH=(bot-top)/P,cw=110;
   let mx=1e-9;for(let i=0;i<r.L.length;++i)mx=Math.max(mx,Math.abs(r.L[i]));
   for(let c=0;c<P;++c)for(let j=0;j<r.cols;++j){
     const v=r.L[c*r.cols+j]/mx;
     mc.fillStyle=v>=0?`rgba(180,40,50,${Math.min(1,v)})`:`rgba(40,80,180,${Math.min(1,-v)})`;
     mc.fillRect(60+j*cw,top+c*cellH,cw-6,Math.ceil(cellH));}
-  // white profile curve inside each column: the value as a function of c
   for(let j=0;j<r.cols;++j){
     mc.strokeStyle='rgba(255,255,255,.9)';mc.lineWidth=1.2;mc.beginPath();
     for(let c=0;c<P;++c){
@@ -1151,8 +1019,7 @@ function drawU(){
   for(let j=0;j<r.cols;++j)mc.fillText(UCOLS[j],60+j*cw+8,16);
   mc.save();mc.translate(14,top+P*cellH/2);mc.rotate(-Math.PI/2);
   mc.fillText('candidate answer c = 0 … 112',-56,0);mc.restore();
-  mc.fillText('max|entry| = '+mx.toFixed(3),60,bot+14);
-  // h strip: the latent itself, 3 fat cells with values
+  mc.fillText('max|entry| = '+mx.toFixed(4),60,bot+14);
   hc.fillStyle='#555';hc.font='11px sans-serif';hc.fillText('h_= (this latent)',26,16);
   let hmx=1e-9;for(const v of r.h)hmx=Math.max(hmx,Math.abs(v));
   const hh=(bot-top)/r.h.length;
@@ -1163,13 +1030,12 @@ function drawU(){
     hc.fillText(r.h[i].toFixed(3),98,top+i*hh+hh/2+4);
     hc.fillStyle='#555';hc.font='10px sans-serif';
     hc.fillText(UCOLS[i]||'',30,top+i*hh+hh/2-10);}
-  // L·h bars (horizontal, aligned with matrix rows) + true logits ghost
   const dvec=new Float64Array(P);
   for(let c=0;c<P;++c){let s=0;
     for(let j=0;j<r.cols;++j)s+=r.L[c*r.cols+j]*r.h[j];dvec[c]=s;}
-  const truelg=ufwd(3,ufwdState().o.concat([-1]));
+  const truelg=ufwd(3,ufwdState(pr).o.concat([-1]),pr);
   let dm=1e-9;for(let c=0;c<P;++c)dm=Math.max(dm,Math.abs(dvec[c]),Math.abs(truelg[c]));
-  const mid=230,ans=(U.a+U.b)%P;
+  const mid=230,ans=(pr.a+pr.b)%P;
   lc.fillStyle='#555';lc.font='11px sans-serif';
   lc.fillText('L·h_= (bars) vs the model\\'s logits (grey) — green row = (a+b) mod 113 = '+ans,10,16);
   for(let c=0;c<P;++c){const y=top+c*cellH;
@@ -1181,49 +1047,32 @@ function drawU(){
     lc.fillRect(mid+Math.min(0,v),y+cellH*0.2,Math.abs(v),Math.max(1,cellH*0.6));}
   lc.strokeStyle='#ccc';lc.beginPath();lc.moveTo(mid,top);lc.lineTo(mid,bot);lc.stroke();
   const typemax=r.cols===3?Math.max(...Array.from({length:P},(_,c)=>Math.abs(r.L[c*3+2]))):0;
-  const xymax=Math.max(...Array.from({length:P},(_,c)=>Math.max(Math.abs(r.L[c*r.cols]),Math.abs(r.L[c*r.cols+1]))));
   $('Uinfo').innerHTML=
     ['<b>embed-out:</b> the "="-latent is (0, 0, −1) — pure type. Its x,y columns are ~dead '+
      '(the "=" token wins ~0 value weight); the <b>type column is the routing sensitivity</b>: '+
-     'max|type col| = '+typemax.toFixed(4)+' at γ = '+U.gam.toFixed(1)+
-     '. Slide γ up and watch it die — softmax saturation makes the router invisible to '+
-     'gradients (the toy version of the trained net\\'s attn.Q leverage suppression).',
+     'max|type col| = '+typemax.toFixed(4)+' at γ = '+pr.gam.toFixed(1)+
+     '. Push Panel 6\\'s γ up and watch it die — softmax saturation makes the router '+
+     'invisible to gradients (the toy version of the trained net\\'s attn.Q suppression).',
      '<b>attn-out:</b> the type column is now <b>exactly zero</b> — nothing downstream reads '+
      'type (max|type col| = '+typemax.toExponential(1)+'). The x,y columns are the candidate '+
-     'circle pulled back through the doubler at this context\\'s operating point — per-context, '+
-     'they move with your sliders. And L·h ≡ the logits here to machine precision: the ReLU '+
-     'doubler is degree-1 homogeneous (gates locally constant), so Euler gives J·m = f(m) exactly.',
+     'circle pulled back through the doubler at this context\\'s operating point — and L·h '+
+     'already ≡ the logits (grey and colored bars coincide): the ReLU doubler is degree-1 '+
+     'homogeneous, so Euler gives J·m = f(m) exactly.',
      '<b>mlp-out:</b> downstream is the frozen rows: L = [row_c | 0], context-free. The '+
-     'sinusoid columns ARE the unembedding circle (cursed phases bend them into the ellipse).',
+     'sinusoid columns ARE the unembedding circle — curse the phases in Panel 6 and watch '+
+     'them bend into the ellipse.',
      '<b>readout:</b> L = the candidate rows themselves, 113×2 — the lens IS W_U, and '+
-     'L·h ≡ the logits exactly (grey and colored bars coincide).'][d];
+     'L·h ≡ the logits exactly.'][d];
 }
 document.querySelectorAll('.ub').forEach(bt=>bt.addEventListener('click',()=>{
-  U.depth=+bt.dataset.b;
+  UD=+bt.dataset.b;
   document.querySelectorAll('.ub').forEach(o=>o.classList.toggle('on',o===bt));
   drawU();}));
-const ubind=(id,k,scale)=>$(id).addEventListener('input',ev=>{
-  U[k]=+ev.target.value/(scale||1);
-  $(id+'V').textContent=scale?U[k].toFixed(2):ev.target.value;drawU();});
-ubind('Ua','a');ubind('Ub','b');ubind('Up1','p1',100);ubind('Up2','p2',100);ubind('Ugam','gam',10);
-$('Uheal').addEventListener('click',()=>{U.p1=0;U.p2=Math.PI/2;
-  $('Up1').value=0;$('Up1V').textContent='0.00';
-  $('Up2').value=157;$('Up2V').textContent='1.57';drawU();});
-
-const bind=(id,k)=>$(id).addEventListener('input',ev=>{S0[k]=+ev.target.value;
-  $(id+'V').textContent=ev.target.value;draw();});
-bind('Ta','a');bind('Tb','b');bind('Ta2','a2');bind('Tb2','b2');
-$('Tsame').addEventListener('click',()=>{S0.b2=(((S0.a+S0.b-S0.a2)%P)+P)%P;
-  $('Tb2').value=S0.b2;$('Tb2V').textContent=S0.b2;draw();});
-$('Tanti').addEventListener('click',()=>{S0.a=1;S0.b=112;S0.a2=56;S0.b2=57;
-  for(const [id,v] of [['Ta',1],['Tb',112],['Ta2',56],['Tb2',57]]){$(id).value=v;$(id+'V').textContent=v;}
-  draw();});
-// numeric verification of the theorem, shown once
-setTimeout(()=>{
-  const nrm=meanLensAttnNorm();
-  $('Tverdict').innerHTML+=` · ‖mean lens @ attn-out‖ over all 12,769 contexts = ${nrm.toExponential(1)} ✓ (theorem: 0)`;
-},80);
-draw();
+// follow Panel 6's controls live
+for(const id of ['Fa','Fb','Fk','Fp1','Fp2','Fg1','Fg2','Fgam','Fs2','Fortho','Fideal']){
+  const e=$(id);
+  if(e){e.addEventListener('input',drawU);e.addEventListener('click',()=>setTimeout(drawU,0));}
+}
 drawU();
 })();
 </script>"""
