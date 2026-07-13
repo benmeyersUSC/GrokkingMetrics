@@ -347,7 +347,7 @@ function ln(src,g,b){{const out=new Float64Array(D2);
     const is=1/Math.sqrt(v/E+1e-8);
     for(let e=0;e<E;++e)out[s*E+e]=(src[s*E+e]-m)*is*g[e]+b[e];}}
   return out;}}
-function forwardFromB2(h2){{
+function forwardFull(h2){{
   const h=Float64Array.from(h2);
   {{const u=ln(h,W.ln1g,W.ln1b);
     const q=new Float64Array(SEQ*H*HD),k=new Float64Array(SEQ*H*HD),v=new Float64Array(SEQ*H*HD);
@@ -377,11 +377,18 @@ function forwardFromB2(h2){{
   const lg=new Float64Array(P);
   for(let c=0;c<P;++c){{let sum=W.bu[c];
     for(let e=0;e<E;++e)sum+=W.wu[c*E+e]*h[2*E+e];lg[c]=sum;}}
-  return lg;}}
+  return {{h3:h,lg}};}}
+function forwardFromB2(h2){{return forwardFull(h2).lg;}}
 function h2From(a,b){{const h=new Float64Array(D2);const tok=[a,b,P];
   for(let s=0;s<SEQ;++s)for(let e=0;e<E;++e)
     h[s*E+e]=W.embW[e*V+tok[s]]+W.embB[e]+W.pos[s*E+e];
   return h;}}
+function h1From(a,b){{const h=new Float64Array(D2);const tok=[a,b,P];
+  for(let s=0;s<SEQ;++s)for(let e=0;e<E;++e)
+    h[s*E+e]=W.embW[e*V+tok[s]]+W.embB[e];
+  return h;}}
+// shared live model for downstream cards (Experiment 0 etc.)
+window.GrokLive={{W,L2,forwardFull,forwardFromB2,h2From,h1From,P,V,SEQ,E,D2}};
 
 // unit lens atoms
 const atoms=new Float64Array(P*D2);
@@ -531,6 +538,284 @@ document.querySelectorAll('.jmode').forEach(bt=>
   $('Jcheck').textContent=`live-model check: page forward vs training dump on ${{GOLD.length}} contexts — max |Δlogit| = ${{worst.toExponential(1)}}, argmax ${{ok}}/${{GOLD.length}} ${{ok===GOLD.length?'✓':'✗ MISMATCH'}}`;}}
 
 drawLensBase();update();
+}})();
+</script>"""
+
+
+def build_exp0(d: Path) -> str:
+    """Experiment 0 of the dispositional-abstraction program: same answer from
+    different inputs — when do the DISPOSITIONS (L_l h) align while the STATES (h)
+    stay distinct? Interactive pair picker over the live in-page model (shares
+    window.GrokLive with the intervention lab) + population bands (same-sum vs
+    different-sum pairs) + the training-collapse panel computed from every
+    retained snapshot's lens dump."""
+    files = sorted(d.glob("jlens/jlens_*.bin"),
+                   key=lambda p: int(re.search(r"jlens_(\d+)", p.name).group(1)))
+    if not files:
+        return ""
+    sys.path.insert(0, str(Path(__file__).parent))
+    from jlens_analysis import read_jlens
+
+    rng = np.random.default_rng(7)
+
+    def pair_sets(idx):
+        sums = ((idx // P) + (idx % P)) % P
+        by_sum = {}
+        for i, s in enumerate(sums):
+            by_sum.setdefault(int(s), []).append(i)
+        same = []
+        for g in by_sum.values():
+            for i in range(len(g)):
+                for j in range(i + 1, len(g)):
+                    same.append((g[i], g[j]))
+        same = [same[i] for i in rng.permutation(len(same))[:500]]
+        diff = []
+        n = len(idx)
+        while len(diff) < 500:
+            i, j = rng.integers(0, n, 2)
+            if i != j and sums[i] != sums[j]:
+                diff.append((int(i), int(j)))
+        return same, diff
+
+    def mean_cos(M, pairs):
+        Mc = M - M.mean(axis=0, keepdims=True)
+        n = Mc / (np.linalg.norm(Mc, axis=1, keepdims=True) + 1e-30)
+        return float(np.mean([float(n[i] @ n[j]) for i, j in pairs]))
+
+    # ── training-collapse curves over all snapshots ──────────────────────────
+    steps, curves = [], {k: [] for k in
+                         ("D2s", "D2d", "D3s", "D3d", "S2s", "S2d", "S3s", "S4s")}
+    final = None
+    for p in files:
+        try:
+            dd = read_jlens(p)
+        except Exception:
+            continue
+        idx = np.concatenate([dd["fit_idx"], dd["eval_idx"]])
+        h2 = np.concatenate([dd["fit_acts"][2], dd["eval_acts"][2]])
+        h3 = np.concatenate([dd["fit_acts"][3], dd["eval_acts"][3]])
+        h4 = np.concatenate([dd["fit_acts"][4], dd["eval_acts"][4]])
+        d2 = h2 @ dd["bounds"][2]["lens"].T
+        d3 = h3 @ dd["bounds"][3]["lens"].T
+        same, diff = pair_sets(idx)
+        steps.append(int(dd["step"]))
+        curves["D2s"].append(mean_cos(d2, same)); curves["D2d"].append(mean_cos(d2, diff))
+        curves["D3s"].append(mean_cos(d3, same)); curves["D3d"].append(mean_cos(d3, diff))
+        curves["S2s"].append(mean_cos(h2, same)); curves["S2d"].append(mean_cos(h2, diff))
+        curves["S3s"].append(mean_cos(h3, same)); curves["S4s"].append(mean_cos(h4, same))
+        final = dd
+    _, _, grok, _ = run_curves(d)
+    import json
+    curves_js = json.dumps({"steps": steps, **{k: [round(v, 4) for v in vv]
+                                               for k, vv in curves.items()}})
+
+    # ── bake final-snapshot lenses + boundary means (for live centering) ─────
+    L3 = final["bounds"][3]["lens"].astype(np.float32)
+    L4 = final["bounds"][4]["lens"].astype(np.float32)
+    means = {}
+    for b in (1, 2, 3):
+        means[f"h{b}"] = np.concatenate([final["fit_acts"][b], final["eval_acts"][b]]
+                                        ).mean(axis=0).astype(np.float32)
+    means["h4"] = np.concatenate([final["fit_acts"][4], final["eval_acts"][4]]
+                                 ).mean(axis=0).astype(np.float32)
+    means["lg"] = np.concatenate([final["fit_logits"], final["eval_logits"]]
+                                 ).mean(axis=0).astype(np.float32)
+    mean_js = ",".join(f"{k}:dec32('{b64(v)}')" for k, v in means.items())
+
+    return f"""
+<div class='card' id='exp0'><h2>Experiment 0 — dispositional abstraction: same answer, different inputs</h2>
+<p class='sub'>From the <b>dispositional-abstraction program</b>: state-sameness is
+cos(h, h′); disposition-sameness is cos(L·h, L·h′) — sameness <i>as the output sees it</i>,
+state-sameness quotiented by ker L. Pick two inputs with the same sum (12+73 and 80+5 both
+mean "85"): they are literally different prompts, so their latents differ — but somewhere in
+depth their <b>dispositions</b> must snap together. Everything below runs live on the trained
+model. <b>Predictions, registered before looking:</b> (1) the snap lands at txf-out — that's
+where the nonlinear work ends; the story is S(txf-out) staying visibly below 1 while
+D(txf-out) ≈ 1: <i>different latents, identical disposition</i>. (2) At the readout the
+state itself merges (the readout ≈ the circle-point for a+b) — by then the network has
+<i>forgotten the operands</i>, not just routed past them. (3) At the embedding boundaries the
+mean lens is answer-blind (the spin-and-cancel result), so D there is high for same-sum and
+different-sum pairs alike — which is why the <b>bands are the measurement</b>: same-sum
+(blue) vs different-sum (grey) populations of 150 random pairs each. Where the bands
+separate is where disposition discriminates <i>meaning</i>. Cosines are centered against the
+dataset mean (the "="-slot and positional embedding are shared constants that would inflate
+everything); flip to raw to see the uncentered version. Centered curves at embed-out and
+posemb-out are identical by construction — the positional embedding adds the same constant
+to every prompt.</p>
+<div class='ctl'>pair 1: a <input type='range' id='Xa' min='0' max='112' value='12'>
+ <span class='val' id='XaV'>12</span>
+ b <input type='range' id='Xb' min='0' max='112' value='73'>
+ <span class='val' id='XbV'>73</span>
+ &nbsp;&nbsp; pair 2: a′ <input type='range' id='Xa2' min='0' max='112' value='80'>
+ <span class='val' id='Xa2V'>80</span>
+ b′ <input type='range' id='Xb2' min='0' max='112' value='5'>
+ <span class='val' id='Xb2V'>5</span>
+ &nbsp; <button id='Xsame' class='jmode'>make same-sum</button>
+ &nbsp; <label><input type='checkbox' id='Xraw'> raw (uncentered)</label></div>
+<div id='Xverdict' style='font-weight:640;margin:6px 0'></div>
+<canvas id='Xchart' width='1140' height='330'></canvas>
+</div>
+<div class='card' id='exp0train'><h2>Abstraction crystallizing — the dispositional collapse through training</h2>
+<p class='sub'>The same measurement swept across every retained snapshot: for 512 contexts
+per snapshot, all same-sum pairs (same meaning, different inputs) vs random different-sum
+pairs, 500 pairs per class, centered cosines against that snapshot's own dataset mean —
+each snapshot read through <b>its own</b> lens, so this is the instrument watching the
+abstraction being built. Two things to watch: the blue same-sum disposition curve pulling
+away from its grey control (disposition beginning to encode <i>meaning</i>), and where that
+separation sits relative to the grok line — does the dispositional collapse lead, track,
+or lag the behavioral jump? The purple curve is the readout's <i>state</i> within class:
+when it rises, the network isn't just routing same-sum inputs to the same answer, it is
+physically merging them — forgetting the operands.</p>
+<canvas id='Xtrain' width='1140' height='300'></canvas>
+</div>
+<script>
+(function(){{
+function dec32(s){{const b=atob(s),u=new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return new Float32Array(u.buffer);}}
+const G=window.GrokLive;
+if(!G){{document.getElementById('Xverdict').textContent='live model unavailable';return;}}
+const P=G.P,E=G.E,D2=G.D2;
+const L3=dec32('{b64(L3)}'),L4=dec32('{b64(L4)}');
+const MEAN={{{mean_js}}};
+const TR={curves_js};
+const GROK={int(grok)};
+
+function applyLens(L,h,rows,dim){{const out=new Float64Array(rows);
+  for(let c=0;c<rows;++c){{let s=0;
+    for(let i=0;i<dim;++i)s+=L[c*dim+i]*h[i];out[c]=s;}}
+  return out;}}
+function cosv(x,y,mean,raw){{let dx,dy,dd=0,nx=0,ny=0;
+  for(let i=0;i<x.length;++i){{dx=x[i]-(raw?0:mean[i]);dy=y[i]-(raw?0:mean[i]);
+    dd+=dx*dy;nx+=dx*dx;ny+=dy*dy;}}
+  return dd/(Math.sqrt(nx*ny)+1e-30);}}
+
+const cache=new Map();
+function feats(a,b){{const key=a*113+b;
+  if(cache.has(key))return cache.get(key);
+  const h1=G.h1From(a,b),h2=G.h2From(a,b);
+  const r=G.forwardFull(h2);
+  const h4=Float64Array.from(r.h3.subarray(2*E,3*E));
+  const f={{h:[h1,h2,r.h3,h4,r.lg],
+    d:[applyLens(G.L2,h1,P,D2),applyLens(G.L2,h2,P,D2),applyLens(L3,r.h3,P,D2),
+       applyLens(L4,h4,P,E),r.lg]}};
+  cache.set(key,f);return f;}}
+const HM=[MEAN.h1,MEAN.h2,MEAN.h3,MEAN.h4,MEAN.lg];
+const DM=[applyLens(G.L2,MEAN.h1,P,D2),applyLens(G.L2,MEAN.h2,P,D2),
+          applyLens(L3,MEAN.h3,P,D2),applyLens(L4,MEAN.h4,P,E),MEAN.lg];
+function curvesFor(a,b,a2,b2,raw){{
+  const f1=feats(a,b),f2=feats(a2,b2);
+  const S=[],D=[];
+  for(let l=0;l<5;++l){{S.push(cosv(f1.h[l],f2.h[l],HM[l],raw));
+    D.push(cosv(f1.d[l],f2.d[l],DM[l],raw));}}
+  return {{S,D}};}}
+
+// population bands (computed lazily after first paint)
+let bands=null;
+function computeBands(){{const rnd=(()=>{{let s=99;
+    return ()=>{{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;}}}})();
+  const mk=(same)=>{{const Ds=[[],[],[],[],[]],Ss=[[],[],[],[],[]];
+    for(let t=0;t<150;++t){{
+      const a=Math.floor(rnd()*P),b=Math.floor(rnd()*P);
+      let a2=Math.floor(rnd()*P),b2;
+      if(same){{if(a2===a)a2=(a2+1)%P;b2=((a+b-a2)%P+P)%P;}}
+      else{{b2=Math.floor(rnd()*P);
+        if((a2+b2)%P===(a+b)%P)b2=(b2+1)%P;}}
+      const c=curvesFor(a,b,a2,b2,S0.raw);
+      for(let l=0;l<5;++l){{Ds[l].push(c.D[l]);Ss[l].push(c.S[l]);}}}}
+    const pct=(arr,q)=>{{const s=[...arr].sort((x,y)=>x-y);
+      return s[Math.floor(q*(s.length-1))];}};
+    return {{Dlo:Ds.map(a=>pct(a,.1)),Dhi:Ds.map(a=>pct(a,.9)),
+             Smed:Ss.map(a=>pct(a,.5))}};}};
+  bands={{same:mk(true),diff:mk(false)}};}}
+
+const S0={{a:12,b:73,a2:80,b2:5,raw:false}};
+const cv=document.getElementById('Xchart'),cx=cv.getContext('2d');
+const LBL=['embed-out','posemb-out','txf-out','readout','logits'];
+function draw(){{
+  const c=curvesFor(S0.a,S0.b,S0.a2,S0.b2,S0.raw);
+  cx.clearRect(0,0,cv.width,cv.height);
+  const x0=60,x1=cv.width-20,y0=18,y1=cv.height-40;
+  const ymin=-0.25,ymax=1.05;
+  const X=l=>x0+(x1-x0)*l/4, Y=v=>y1-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y1-y0);
+  cx.strokeStyle='#ddd';cx.lineWidth=1;
+  for(const g of [0,0.5,1]){{cx.beginPath();cx.moveTo(x0,Y(g));cx.lineTo(x1,Y(g));cx.stroke();
+    cx.fillStyle='#999';cx.font='11px sans-serif';cx.fillText(g.toFixed(1),x0-28,Y(g)+4);}}
+  cx.fillStyle='#555';
+  for(let l=0;l<5;++l)cx.fillText(LBL[l],X(l)-24,y1+16);
+  const band=(lo,hi,col)=>{{cx.fillStyle=col;cx.beginPath();
+    cx.moveTo(X(0),Y(lo[0]));
+    for(let l=1;l<5;++l)cx.lineTo(X(l),Y(lo[l]));
+    for(let l=4;l>=0;--l)cx.lineTo(X(l),Y(hi[l]));
+    cx.closePath();cx.fill();}};
+  if(bands){{band(bands.same.Dlo,bands.same.Dhi,'rgba(76,120,168,.18)');
+    band(bands.diff.Dlo,bands.diff.Dhi,'rgba(110,110,110,.18)');
+    const med=(m,col)=>{{cx.strokeStyle=col;cx.setLineDash([5,4]);cx.lineWidth=1.2;
+      cx.beginPath();cx.moveTo(X(0),Y(m[0]));
+      for(let l=1;l<5;++l)cx.lineTo(X(l),Y(m[l]));cx.stroke();cx.setLineDash([]);}};
+    med(bands.same.Smed,'rgba(220,130,50,.5)');med(bands.diff.Smed,'rgba(110,110,110,.5)');}}
+  const line=(v,col,w)=>{{cx.strokeStyle=col;cx.lineWidth=w;cx.beginPath();
+    cx.moveTo(X(0),Y(v[0]));
+    for(let l=1;l<5;++l)cx.lineTo(X(l),Y(v[l]));cx.stroke();
+    for(let l=0;l<5;++l){{cx.fillStyle=col;cx.beginPath();
+      cx.arc(X(l),Y(v[l]),3.2,0,7);cx.fill();}}}};
+  line(c.S,'#dc8232',2.4);line(c.D,'#2b5fa8',2.8);
+  cx.font='12px sans-serif';
+  cx.fillStyle='#2b5fa8';cx.fillText('D(ℓ) = cos(L·h, L·h′) — disposition (your pair)',x0+8,y0+12);
+  cx.fillStyle='#dc8232';cx.fillText('S(ℓ) = cos(h, h′) — state (your pair)',x0+8,y0+28);
+  if(bands){{cx.fillStyle='#777';
+    cx.fillText('bands: D over 150 same-sum (blue) / 150 different-sum (grey) pairs · dashed: S medians',x0+8,y0+44);}}
+  const s1=(S0.a+S0.b)%P,s2=(S0.a2+S0.b2)%P;
+  const gap3=c.D[2]-c.S[2];
+  document.getElementById('Xverdict').innerHTML=
+    `${{S0.a}}+${{S0.b}} ≡ <b>${{s1}}</b> &nbsp;vs&nbsp; ${{S0.a2}}+${{S0.b2}} ≡ <b>${{s2}}</b>`+
+    ` &nbsp;(${{s1===s2?'<span style="color:#2c8a3d">same meaning</span>':'<span style="color:#c33939">different meaning</span>'}})`+
+    ` &nbsp;·&nbsp; at txf-out: D = ${{c.D[2].toFixed(3)}}, S = ${{c.S[2].toFixed(3)}},`+
+    ` <b>gap = ${{gap3.toFixed(3)}}</b>${{gap3>0.15?' — a distinction carried in the state that behavior has discarded':''}}`;
+}}
+
+// training panel
+function drawTrain(){{const tv=document.getElementById('Xtrain'),tc=tv.getContext('2d');
+  const x0=60,x1=tv.width-20,y0=16,y1=tv.height-36;
+  const smin=TR.steps[0],smax=TR.steps[TR.steps.length-1];
+  const ymin=-0.2,ymax=1.05;
+  const X=s=>x0+(x1-x0)*(s-smin)/(smax-smin),
+        Y=v=>y1-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y1-y0);
+  tc.strokeStyle='#ddd';
+  for(const g of [0,0.5,1]){{tc.beginPath();tc.moveTo(x0,Y(g));tc.lineTo(x1,Y(g));tc.stroke();
+    tc.fillStyle='#999';tc.font='11px sans-serif';tc.fillText(g.toFixed(1),x0-28,Y(g)+4);}}
+  tc.strokeStyle='#d62728';tc.setLineDash([5,4]);
+  tc.beginPath();tc.moveTo(X(GROK),y0);tc.lineTo(X(GROK),y1);tc.stroke();tc.setLineDash([]);
+  tc.fillStyle='#d62728';tc.fillText('grok',X(GROK)+4,y0+10);
+  const line=(key,col,w,dash)=>{{tc.strokeStyle=col;tc.lineWidth=w;
+    if(dash)tc.setLineDash(dash);tc.beginPath();
+    TR.steps.forEach((s,i)=>{{i?tc.lineTo(X(s),Y(TR[key][i])):tc.moveTo(X(s),Y(TR[key][i]));}});
+    tc.stroke();tc.setLineDash([]);}};
+  line('D3s','#2b5fa8',2.8);line('D3d','#888',1.6);
+  line('S3s','#dc8232',2.2);line('S4s','#8a5fbf',1.8,[6,4]);
+  line('D2s','#2b5fa8',1.4,[3,3]);line('D2d','#bbb',1.2,[3,3]);
+  tc.font='12px sans-serif';let ly=y0+12;
+  const leg=(t,c)=>{{tc.fillStyle=c;tc.fillText(t,x0+8,ly);ly+=15;}};
+  leg('D(txf-out) same-sum — disposition within meaning-class','#2b5fa8');
+  leg('D(txf-out) different-sum — control','#888');
+  leg('S(txf-out) same-sum — the state never merges here','#dc8232');
+  leg('S(readout) same-sum — but the readout does (forgetting)','#8a5fbf');
+  leg('dashed blues: D(posemb-out) same vs diff — the blind boundary','#77a');
+  tc.fillStyle='#555';
+  for(const s of [0,2500,5000,7500,10000])if(s>=smin&&s<=smax)tc.fillText(s,X(s)-10,y1+16);
+}}
+
+const $=id=>document.getElementById(id);
+[['Xa','a'],['Xb','b'],['Xa2','a2'],['Xb2','b2']].forEach(([id,k])=>
+  $(id).addEventListener('input',ev=>{{S0[k]=+ev.target.value;
+    $(id+'V').textContent=ev.target.value;draw();}}));
+$('Xsame').addEventListener('click',()=>{{
+  S0.b2=(((S0.a+S0.b-S0.a2)%P)+P)%P;
+  $('Xb2').value=S0.b2;$('Xb2V').textContent=S0.b2;draw();}});
+$('Xraw').addEventListener('change',ev=>{{S0.raw=ev.target.checked;
+  bands=null;draw();
+  setTimeout(()=>{{computeBands();draw();}},30);}});
+draw();
+setTimeout(()=>{{computeBands();draw();drawTrain();}},60);
 }})();
 </script>"""
 
@@ -904,6 +1189,10 @@ def main() -> int:
     if jspace_html:
         print("intervention lab baked")
 
+    exp0_html = build_exp0(V3)
+    if exp0_html:
+        print("experiment-0 abstraction cards baked")
+
     # Rent-knob section — needs the wd_runs clean grid; skip gracefully without it.
     knob_html = ""
     if (ROOT / "wd_runs" / "clean_grid_summary.json").exists():
@@ -931,6 +1220,7 @@ become points on circles, addition becomes rotation, and answers are read off by
 interference.</p></div>
 {real_html}
 {jspace_html}
+{exp0_html}
 <div class='card' id='ens'><h2>Ensemble — 10 seeds, mean ± 1σ</h2>
 <p class='sub'>Left: raw training step. Right: grok-aligned — each run shifted so its own
 grok moment (peak validation-accuracy slope) sits at τ = 0. Alignment is per-run, which
