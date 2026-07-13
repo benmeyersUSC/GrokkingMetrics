@@ -143,6 +143,27 @@ using UnembedBlock = DenseMDBlock<Tensor<EmbDim>, Tensor<P>, Linear>;
 
 using NandaNet = TrainableTensorNetwork<EmbedBlock, PosEmbBlock, TxfBlock, SelectBlock, UnembedBlock>;
 
+// ─── Split variant: the transformer block's two residual sublayers as separate
+// top-level blocks, exposing the post-attention / pre-MLP boundary to the lens.
+// TransformerBlock is internally BlockSequence<Residual(LN→MHA), Residual(LN→FFN)>,
+// so this is the SAME parameters in the SAME all_params() order — snap_*.bin
+// files load into either net and the forward functions are identical.
+//   boundaries: 0 in · 1 embed-out · 2 posemb-out · 3 attn-out · 4 mlp-out
+//               (== NandaNet's txf-out) · 5 readout · 6 logits
+using AttnHalfBlock = ResidualBlock<BlockSequence<
+    LayerNormBlock<SeqLen, EmbDim>,
+    MultiHeadAttentionBlock<SeqLen, Heads, false, EmbDim>>>;
+using FFNHalfBlock = ResidualBlock<BlockSequence<
+    LayerNormBlock<SeqLen, EmbDim>,
+    MapDenseMDBlock<Tensor<SeqLen, EmbDim>, Tensor<FFNHidden>, 1, ReLU>,
+    MapDenseMDBlock<Tensor<SeqLen, FFNHidden>, Tensor<EmbDim>, 1>>>;
+
+using NandaNetSplit = TrainableTensorNetwork<EmbedBlock, PosEmbBlock,
+    AttnHalfBlock, FFNHalfBlock, SelectBlock, UnembedBlock>;
+
+static_assert(NandaNetSplit::TotalParamCount == NandaNet::TotalParamCount,
+              "split net must be weight-compatible with NandaNet");
+
 using InputT     = NandaNet::InputTensor;       // Tensor<3, Vocab>
 using OutputT    = NandaNet::OutputTensor;      // Tensor<P>
 using BatchInpT  = PrependBatch<Batch, InputT>::type;

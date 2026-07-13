@@ -142,7 +142,7 @@ def build_jlens(d: Path) -> str:
     """J-lens (Metric IV) card: dispersion through training, lens accuracy through
     depth, and the circle-check of per-candidate lens rows. Reads the dumps
     produced by ./nanda_jlens; returns "" gracefully if they are absent."""
-    files = sorted(d.glob("jlens/jlens_*.bin"),
+    files = sorted(d.glob("jlens/jlens_[0-9]*.bin"),
                    key=lambda p: int(re.search(r"jlens_(\d+)", p.name).group(1)))
     if not files:
         return ""
@@ -368,6 +368,7 @@ function forwardFull(h2){{
         for(let kk=0;kk<SEQ;++kk)a+=att[(hh*SEQ+s)*SEQ+kk]*v[(kk*H+hh)*HD+d];
         sum+=a*W.wo[(e*H+hh)*HD+d];}}
       h[s*E+e]+=sum;}}}}
+  const hA=Float64Array.from(h); // post-attention residual (attn-out boundary)
   {{const u=ln(h,W.ln2g,W.ln2b);
     for(let s=0;s<SEQ;++s){{const hid=new Float64Array(F);
       for(let f=0;f<F;++f){{let sum=W.b1[f];
@@ -377,7 +378,7 @@ function forwardFull(h2){{
   const lg=new Float64Array(P);
   for(let c=0;c<P;++c){{let sum=W.bu[c];
     for(let e=0;e<E;++e)sum+=W.wu[c*E+e]*h[2*E+e];lg[c]=sum;}}
-  return {{h3:h,lg}};}}
+  return {{hA,h3:h,lg}};}}
 function forwardFromB2(h2){{return forwardFull(h2).lg;}}
 function h2From(a,b){{const h=new Float64Array(D2);const tok=[a,b,P];
   for(let s=0;s<SEQ;++s)for(let e=0;e<E;++e)
@@ -549,12 +550,29 @@ def build_exp0(d: Path) -> str:
     window.GrokLive with the intervention lab) + population bands (same-sum vs
     different-sum pairs) + the training-collapse panel computed from every
     retained snapshot's lens dump."""
-    files = sorted(d.glob("jlens/jlens_*.bin"),
+    import struct
+    files = sorted(d.glob("jlens/jlens_[0-9]*.bin"),
                    key=lambda p: int(re.search(r"jlens_(\d+)", p.name).group(1)))
     if not files:
         return ""
     sys.path.insert(0, str(Path(__file__).parent))
     from jlens_analysis import read_jlens
+
+    def read_split(p: Path):
+        """jlens_split_<step>.bin from nanda_jlens_split: attn-out lens + acts."""
+        buf = p.read_bytes()
+        off = 24
+        _, tg, ac = struct.unpack_from("<QQQ", buf, off)
+        off += 24
+        lens = np.frombuffer(buf, np.float32, tg * ac, off).reshape(tg, ac).astype(np.float64)
+        off += 4 * (tg * ac + tg + 2)
+        n = struct.unpack_from("<Q", buf, off)[0]
+        off += 8
+        fit = np.frombuffer(buf, np.uint32, n, off)
+        off += 8 * n  # fit + eval indices
+        acts = np.frombuffer(buf, np.float32, 2 * n * tg * 0 + 2 * n * ac, off
+                             ).reshape(2 * n, ac).astype(np.float64)
+        return dict(lens=lens, fit=fit, acts=acts)
 
     rng = np.random.default_rng(7)
 
@@ -584,8 +602,9 @@ def build_exp0(d: Path) -> str:
 
     # ── training-collapse curves over all snapshots ──────────────────────────
     steps, curves = [], {k: [] for k in
-                         ("D2s", "D2d", "D3s", "D3d", "S2s", "S2d", "S3s", "S4s")}
-    final = None
+                         ("D2s", "D2d", "D3s", "D3d", "S2s", "S2d", "S3s", "S4s",
+                          "DAs", "DAd", "SAs")}
+    final, final_split = None, None
     for p in files:
         try:
             dd = read_jlens(p)
@@ -603,19 +622,37 @@ def build_exp0(d: Path) -> str:
         curves["D3s"].append(mean_cos(d3, same)); curves["D3d"].append(mean_cos(d3, diff))
         curves["S2s"].append(mean_cos(h2, same)); curves["S2d"].append(mean_cos(h2, diff))
         curves["S3s"].append(mean_cos(h3, same)); curves["S4s"].append(mean_cos(h4, same))
+        sp = p.parent / f"jlens_split_{dd['step']}.bin"
+        if sp.exists():
+            ss = read_split(sp)
+            assert np.array_equal(ss["fit"], dd["fit_idx"]), "split context sets diverge"
+            da = ss["acts"] @ ss["lens"].T
+            curves["DAs"].append(mean_cos(da, same)); curves["DAd"].append(mean_cos(da, diff))
+            curves["SAs"].append(mean_cos(ss["acts"], same))
+            if final_split is None or dd["step"] >= max(steps):
+                final_split = ss
+        else:
+            for k in ("DAs", "DAd", "SAs"):
+                curves[k].append(None)
         final = dd
+    if final_split is None:
+        print("experiment-0 SKIPPED: no jlens_split dumps — run ./nanda_jlens_split first")
+        return ""
     _, _, grok, _ = run_curves(d)
     import json
-    curves_js = json.dumps({"steps": steps, **{k: [round(v, 4) for v in vv]
-                                               for k, vv in curves.items()}})
+    curves_js = json.dumps({"steps": steps,
+                            **{k: [None if v is None else round(v, 4) for v in vv]
+                               for k, vv in curves.items()}})
 
     # ── bake final-snapshot lenses + boundary means (for live centering) ─────
     L3 = final["bounds"][3]["lens"].astype(np.float32)
     L4 = final["bounds"][4]["lens"].astype(np.float32)
+    LA = final_split["lens"].astype(np.float32)
     means = {}
     for b in (1, 2, 3):
         means[f"h{b}"] = np.concatenate([final["fit_acts"][b], final["eval_acts"][b]]
                                         ).mean(axis=0).astype(np.float32)
+    means["hA"] = final_split["acts"].mean(axis=0).astype(np.float32)
     means["h4"] = np.concatenate([final["fit_acts"][4], final["eval_acts"][4]]
                                  ).mean(axis=0).astype(np.float32)
     means["lg"] = np.concatenate([final["fit_logits"], final["eval_logits"]]
@@ -629,14 +666,20 @@ cos(h, h′); disposition-sameness is cos(L·h, L·h′) — sameness <i>as the 
 state-sameness quotiented by ker L. Pick two inputs with the same sum (12+73 and 80+5 both
 mean "85"): they are literally different prompts, so their latents differ — but somewhere in
 depth their <b>dispositions</b> must snap together. Everything below runs live on the trained
-model. <b>Predictions, registered before looking:</b> (1) the snap lands at txf-out — that's
-where the nonlinear work ends; the story is S(txf-out) staying visibly below 1 while
-D(txf-out) ≈ 1: <i>different latents, identical disposition</i>. (2) At the readout the
-state itself merges (the readout ≈ the circle-point for a+b) — by then the network has
-<i>forgotten the operands</i>, not just routed past them. (3) At the embedding boundaries the
-mean lens is answer-blind (the spin-and-cancel result), so D there is high for same-sum and
-different-sum pairs alike — which is why the <b>bands are the measurement</b>: same-sum
-(blue) vs different-sum (grey) populations of 150 random pairs each. Where the bands
+model, with the transformer block split at its seam so the lens sees <b>attn-out</b>
+(post-attention, pre-MLP) as its own boundary. <b>Predictions, registered before looking:</b>
+(1) the snap lands at mlp-out — after attention the "="-slot finally <i>holds</i> both
+operand angles (transport complete), but any linear read of it is still additive in
+θ_a, θ_b; the sum-feature cos(θ_a+θ_b) is born in the MLP's products, so D at attn-out
+should improve only modestly and snap only at mlp-out. If D partially snaps at attn-out
+instead, that's evidence some multiplication already happens inside attention.
+(2) S(mlp-out) stays visibly below 1 while D(mlp-out) ≈ 1: <i>different latents, identical
+disposition</i>. (3) At the readout the state itself merges (the readout ≈ the circle-point
+for a+b) — the network has <i>forgotten the operands</i>, not just routed past them. (4) At
+the embedding boundaries the mean lens is answer-blind (the spin-and-cancel result), so D
+there is high for same-sum and different-sum pairs alike — which is why the <b>bands are
+the measurement</b>: same-sum (blue) vs different-sum (grey) populations of 150 random
+pairs each. Where the bands
 separate is where disposition discriminates <i>meaning</i>. Cosines are centered against the
 dataset mean (the "="-slot and positional embedding are shared constants that would inflate
 everything); flip to raw to see the uncentered version. Centered curves at embed-out and
@@ -674,8 +717,8 @@ function dec32(s){{const b=atob(s),u=new Uint8Array(b.length);
   for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return new Float32Array(u.buffer);}}
 const G=window.GrokLive;
 if(!G){{document.getElementById('Xverdict').textContent='live model unavailable';return;}}
-const P=G.P,E=G.E,D2=G.D2;
-const L3=dec32('{b64(L3)}'),L4=dec32('{b64(L4)}');
+const P=G.P,E=G.E,D2=G.D2,NB=6;
+const L3=dec32('{b64(L3)}'),L4=dec32('{b64(L4)}'),LA=dec32('{b64(LA)}');
 const MEAN={{{mean_js}}};
 const TR={curves_js};
 const GROK={int(grok)};
@@ -695,17 +738,18 @@ function feats(a,b){{const key=a*113+b;
   const h1=G.h1From(a,b),h2=G.h2From(a,b);
   const r=G.forwardFull(h2);
   const h4=Float64Array.from(r.h3.subarray(2*E,3*E));
-  const f={{h:[h1,h2,r.h3,h4,r.lg],
-    d:[applyLens(G.L2,h1,P,D2),applyLens(G.L2,h2,P,D2),applyLens(L3,r.h3,P,D2),
-       applyLens(L4,h4,P,E),r.lg]}};
+  const f={{h:[h1,h2,r.hA,r.h3,h4,r.lg],
+    d:[applyLens(G.L2,h1,P,D2),applyLens(G.L2,h2,P,D2),applyLens(LA,r.hA,P,D2),
+       applyLens(L3,r.h3,P,D2),applyLens(L4,h4,P,E),r.lg]}};
   cache.set(key,f);return f;}}
-const HM=[MEAN.h1,MEAN.h2,MEAN.h3,MEAN.h4,MEAN.lg];
+const HM=[MEAN.h1,MEAN.h2,MEAN.hA,MEAN.h3,MEAN.h4,MEAN.lg];
 const DM=[applyLens(G.L2,MEAN.h1,P,D2),applyLens(G.L2,MEAN.h2,P,D2),
-          applyLens(L3,MEAN.h3,P,D2),applyLens(L4,MEAN.h4,P,E),MEAN.lg];
+          applyLens(LA,MEAN.hA,P,D2),applyLens(L3,MEAN.h3,P,D2),
+          applyLens(L4,MEAN.h4,P,E),MEAN.lg];
 function curvesFor(a,b,a2,b2,raw){{
   const f1=feats(a,b),f2=feats(a2,b2);
   const S=[],D=[];
-  for(let l=0;l<5;++l){{S.push(cosv(f1.h[l],f2.h[l],HM[l],raw));
+  for(let l=0;l<NB;++l){{S.push(cosv(f1.h[l],f2.h[l],HM[l],raw));
     D.push(cosv(f1.d[l],f2.d[l],DM[l],raw));}}
   return {{S,D}};}}
 
@@ -713,7 +757,8 @@ function curvesFor(a,b,a2,b2,raw){{
 let bands=null;
 function computeBands(){{const rnd=(()=>{{let s=99;
     return ()=>{{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;}}}})();
-  const mk=(same)=>{{const Ds=[[],[],[],[],[]],Ss=[[],[],[],[],[]];
+  const mk=(same)=>{{const Ds=[],Ss=[];
+    for(let l=0;l<NB;++l){{Ds.push([]);Ss.push([]);}}
     for(let t=0;t<150;++t){{
       const a=Math.floor(rnd()*P),b=Math.floor(rnd()*P);
       let a2=Math.floor(rnd()*P),b2;
@@ -721,7 +766,7 @@ function computeBands(){{const rnd=(()=>{{let s=99;
       else{{b2=Math.floor(rnd()*P);
         if((a2+b2)%P===(a+b)%P)b2=(b2+1)%P;}}
       const c=curvesFor(a,b,a2,b2,S0.raw);
-      for(let l=0;l<5;++l){{Ds[l].push(c.D[l]);Ss[l].push(c.S[l]);}}}}
+      for(let l=0;l<NB;++l){{Ds[l].push(c.D[l]);Ss[l].push(c.S[l]);}}}}
     const pct=(arr,q)=>{{const s=[...arr].sort((x,y)=>x-y);
       return s[Math.floor(q*(s.length-1))];}};
     return {{Dlo:Ds.map(a=>pct(a,.1)),Dhi:Ds.map(a=>pct(a,.9)),
@@ -730,33 +775,33 @@ function computeBands(){{const rnd=(()=>{{let s=99;
 
 const S0={{a:12,b:73,a2:80,b2:5,raw:false}};
 const cv=document.getElementById('Xchart'),cx=cv.getContext('2d');
-const LBL=['embed-out','posemb-out','txf-out','readout','logits'];
+const LBL=['embed-out','posemb-out','attn-out','mlp-out','readout','logits'];
 function draw(){{
   const c=curvesFor(S0.a,S0.b,S0.a2,S0.b2,S0.raw);
   cx.clearRect(0,0,cv.width,cv.height);
   const x0=60,x1=cv.width-20,y0=18,y1=cv.height-40;
   const ymin=-0.25,ymax=1.05;
-  const X=l=>x0+(x1-x0)*l/4, Y=v=>y1-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y1-y0);
+  const X=l=>x0+(x1-x0)*l/(NB-1), Y=v=>y1-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y1-y0);
   cx.strokeStyle='#ddd';cx.lineWidth=1;
   for(const g of [0,0.5,1]){{cx.beginPath();cx.moveTo(x0,Y(g));cx.lineTo(x1,Y(g));cx.stroke();
     cx.fillStyle='#999';cx.font='11px sans-serif';cx.fillText(g.toFixed(1),x0-28,Y(g)+4);}}
   cx.fillStyle='#555';
-  for(let l=0;l<5;++l)cx.fillText(LBL[l],X(l)-24,y1+16);
+  for(let l=0;l<NB;++l)cx.fillText(LBL[l],X(l)-24,y1+16);
   const band=(lo,hi,col)=>{{cx.fillStyle=col;cx.beginPath();
     cx.moveTo(X(0),Y(lo[0]));
-    for(let l=1;l<5;++l)cx.lineTo(X(l),Y(lo[l]));
-    for(let l=4;l>=0;--l)cx.lineTo(X(l),Y(hi[l]));
+    for(let l=1;l<NB;++l)cx.lineTo(X(l),Y(lo[l]));
+    for(let l=NB-1;l>=0;--l)cx.lineTo(X(l),Y(hi[l]));
     cx.closePath();cx.fill();}};
   if(bands){{band(bands.same.Dlo,bands.same.Dhi,'rgba(76,120,168,.18)');
     band(bands.diff.Dlo,bands.diff.Dhi,'rgba(110,110,110,.18)');
     const med=(m,col)=>{{cx.strokeStyle=col;cx.setLineDash([5,4]);cx.lineWidth=1.2;
       cx.beginPath();cx.moveTo(X(0),Y(m[0]));
-      for(let l=1;l<5;++l)cx.lineTo(X(l),Y(m[l]));cx.stroke();cx.setLineDash([]);}};
+      for(let l=1;l<NB;++l)cx.lineTo(X(l),Y(m[l]));cx.stroke();cx.setLineDash([]);}};
     med(bands.same.Smed,'rgba(220,130,50,.5)');med(bands.diff.Smed,'rgba(110,110,110,.5)');}}
   const line=(v,col,w)=>{{cx.strokeStyle=col;cx.lineWidth=w;cx.beginPath();
     cx.moveTo(X(0),Y(v[0]));
-    for(let l=1;l<5;++l)cx.lineTo(X(l),Y(v[l]));cx.stroke();
-    for(let l=0;l<5;++l){{cx.fillStyle=col;cx.beginPath();
+    for(let l=1;l<NB;++l)cx.lineTo(X(l),Y(v[l]));cx.stroke();
+    for(let l=0;l<NB;++l){{cx.fillStyle=col;cx.beginPath();
       cx.arc(X(l),Y(v[l]),3.2,0,7);cx.fill();}}}};
   line(c.S,'#dc8232',2.4);line(c.D,'#2b5fa8',2.8);
   cx.font='12px sans-serif';
@@ -765,11 +810,12 @@ function draw(){{
   if(bands){{cx.fillStyle='#777';
     cx.fillText('bands: D over 150 same-sum (blue) / 150 different-sum (grey) pairs · dashed: S medians',x0+8,y0+44);}}
   const s1=(S0.a+S0.b)%P,s2=(S0.a2+S0.b2)%P;
-  const gap3=c.D[2]-c.S[2];
+  const gap3=c.D[3]-c.S[3];
   document.getElementById('Xverdict').innerHTML=
     `${{S0.a}}+${{S0.b}} ≡ <b>${{s1}}</b> &nbsp;vs&nbsp; ${{S0.a2}}+${{S0.b2}} ≡ <b>${{s2}}</b>`+
     ` &nbsp;(${{s1===s2?'<span style="color:#2c8a3d">same meaning</span>':'<span style="color:#c33939">different meaning</span>'}})`+
-    ` &nbsp;·&nbsp; at txf-out: D = ${{c.D[2].toFixed(3)}}, S = ${{c.S[2].toFixed(3)}},`+
+    ` &nbsp;·&nbsp; attn-out: D = ${{c.D[2].toFixed(3)}}, S = ${{c.S[2].toFixed(3)}}`+
+    ` &nbsp;·&nbsp; mlp-out: D = ${{c.D[3].toFixed(3)}}, S = ${{c.S[3].toFixed(3)}},`+
     ` <b>gap = ${{gap3.toFixed(3)}}</b>${{gap3>0.15?' — a distinction carried in the state that behavior has discarded':''}}`;
 }}
 
@@ -787,19 +833,23 @@ function drawTrain(){{const tv=document.getElementById('Xtrain'),tc=tv.getContex
   tc.beginPath();tc.moveTo(X(GROK),y0);tc.lineTo(X(GROK),y1);tc.stroke();tc.setLineDash([]);
   tc.fillStyle='#d62728';tc.fillText('grok',X(GROK)+4,y0+10);
   const line=(key,col,w,dash)=>{{tc.strokeStyle=col;tc.lineWidth=w;
-    if(dash)tc.setLineDash(dash);tc.beginPath();
-    TR.steps.forEach((s,i)=>{{i?tc.lineTo(X(s),Y(TR[key][i])):tc.moveTo(X(s),Y(TR[key][i]));}});
+    if(dash)tc.setLineDash(dash);tc.beginPath();let pen=false;
+    TR.steps.forEach((s,i)=>{{const v=TR[key][i];
+      if(v===null){{pen=false;return;}}
+      pen?tc.lineTo(X(s),Y(v)):tc.moveTo(X(s),Y(v));pen=true;}});
     tc.stroke();tc.setLineDash([]);}};
   line('D3s','#2b5fa8',2.8);line('D3d','#888',1.6);
+  line('DAs','#1f9e89',2.4);line('DAd','#9ecac1',1.2,[3,3]);
   line('S3s','#dc8232',2.2);line('S4s','#8a5fbf',1.8,[6,4]);
-  line('D2s','#2b5fa8',1.4,[3,3]);line('D2d','#bbb',1.2,[3,3]);
+  line('D2s','#2b5fa8',1.4,[3,3]);
   tc.font='12px sans-serif';let ly=y0+12;
   const leg=(t,c)=>{{tc.fillStyle=c;tc.fillText(t,x0+8,ly);ly+=15;}};
-  leg('D(txf-out) same-sum — disposition within meaning-class','#2b5fa8');
-  leg('D(txf-out) different-sum — control','#888');
-  leg('S(txf-out) same-sum — the state never merges here','#dc8232');
+  leg('D(mlp-out) same-sum — disposition within meaning-class','#2b5fa8');
+  leg('D(attn-out) same-sum — transport done, multiplication not yet','#1f9e89');
+  leg('D(mlp-out) different-sum — control (attn-out control dotted teal)','#888');
+  leg('S(mlp-out) same-sum — the state never merges here','#dc8232');
   leg('S(readout) same-sum — but the readout does (forgetting)','#8a5fbf');
-  leg('dashed blues: D(posemb-out) same vs diff — the blind boundary','#77a');
+  leg('dashed blue: D(posemb-out) same-sum — the blind boundary','#77a');
   tc.fillStyle='#555';
   for(const s of [0,2500,5000,7500,10000])if(s>=smin&&s<=smax)tc.fillText(s,X(s)-10,y1+16);
 }}

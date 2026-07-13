@@ -158,7 +158,7 @@ def main() -> int:
         if a.startswith("--ks"):
             ks = [int(x) for x in a.split("=")[1].split(",")]
 
-    files = sorted(ckpt.glob("jlens/jlens_*.bin"),
+    files = sorted(ckpt.glob("jlens/jlens_[0-9]*.bin"),
                    key=lambda p: int(re.search(r"jlens_(\d+)", p.name).group(1)))
     if not files:
         print(f"no jlens dumps under {ckpt}/jlens", file=sys.stderr)
