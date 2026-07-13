@@ -900,6 +900,30 @@ router and the embed-out type column <i>dies</i> — ∂(softmax)/∂(type) → 
 router is invisible to gradients, which is the attn.Q leverage suppression we measured in
 the real network. And the parable's cursed phases bend these row-sinusoids into the
 ellipse — heal up top, and watch the lens straighten.</p>
+<h4>Experiment 0 on the toy — dispositional abstraction across depth, with bands</h4>
+<p class='sub'>The same measurement as the real-model Experiment 0, on this machine:
+S(ℓ) = cos(h, h′) over the full residual state, D(ℓ) = cos(L·h, L·h′) with the <b>mean
+lens</b> fit the same way as the real pipeline (averaged over a stride sample of contexts),
+centered against the dataset mean. Prompt 1 is <b>Panel 6's (a, b)</b>; pick the comparison
+prompt here. Bands: 150 same-sum (blue) vs 150 different-sum (grey) pairs. The punchline
+this toy adds: its attention routes <b>by type only</b> — the softmax never reads a or b —
+so there is <b>zero value-composition by construction</b>. Before the MLP the mean lens is
+<b>zero outright</b> — not "weakly informative": D does not exist there, and the chart says
+so with a blind zone instead of plotting cosines of numerical dust. Hold that against the
+trained network's attn-out band [0.47, 0.94]: the entire difference is attention's leaked
+multiplication. Two more one-frequency truths to notice: same-sum D from mlp-out is
+<b>exactly 1</b> (one circle ⇒ one disposition shape per class), and the different-sum band
+spans nearly [−1, 1] because adjacent classes score cos(2π/113) ≈ 0.9985 — the agonizing
+one-frequency margin. The multi-frequency circuit is what buys separation; here you see
+why it must.</p>
+<div class='ctl'>comparison prompt: a′ <input type='range' id='Va2' min='0' max='112' value='30'>
+ <span class='val' id='Va2V'>30</span>
+ b′ <input type='range' id='Vb2' min='0' max='112' value='92'>
+ <span class='val' id='Vb2V'>92</span>
+ &nbsp; <button id='Vsame' class='jmode'>make same-sum</button>
+ <span id='Vverdict' style='font-weight:640;margin-left:14px'></span></div>
+<canvas id='Vchart' width='1140' height='330'></canvas>
+<h4 style='margin-top:18px'>The lens object — L, all of it, 113 × 3</h4>
 <div class='ctl'>depth:
  <button class='jmode ub on' data-b='0'>embed-out</button><button class='jmode ub' data-b='1'>attn-out</button><button class='jmode ub' data-b='2'>mlp-out</button><button class='jmode ub' data-b='3'>readout (rows)</button>
  &nbsp; <span id='Upar' style='color:#8a93a6;font-size:12.5px'></span></div>
@@ -1068,12 +1092,188 @@ document.querySelectorAll('.ub').forEach(bt=>bt.addEventListener('click',()=>{
   UD=+bt.dataset.b;
   document.querySelectorAll('.ub').forEach(o=>o.classList.toggle('on',o===bt));
   drawU();}));
+// ── Experiment 0 on the toy: D/S across depth with bands ────────────────────
+const V={a2:30,b2:92};
+const VLBL=['embed','attn-out','mlp-out','readout','logits'];
+function stateAt(d,a,b,pr){
+  const ca=ucol(a,pr),cb=ucol(b,pr);
+  if(d===0)return [ca[0],ca[1],1, cb[0],cb[1],1, 0,0,-1];
+  const st=(function(){const sc=[pr.gam/Math.sqrt(3),pr.gam/Math.sqrt(3),-pr.gam/Math.sqrt(3)];
+    const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
+    const w=e.map(x=>x/z);
+    const m=[w[0]*ca[0]+w[1]*cb[0],w[0]*ca[1]+w[1]*cb[1]];
+    let ox=0,oy=0;
+    for(let j=0;j<MLPN;++j){
+      const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
+      ox+=h*Math.cos(2*UPSI[j]+pr.p1);oy+=h*Math.sin(2*UPSI[j]+pr.p1);}
+    return {m,o:[MLPS*ox/(MLPN/2),MLPS*oy/(MLPN/2)]};})();
+  if(d===1)return [ca[0],ca[1],1, cb[0],cb[1],1, st.m[0],st.m[1],-1];
+  if(d===2)return [ca[0],ca[1],1, cb[0],cb[1],1, st.o[0],st.o[1],-1];
+  if(d===3)return [st.o[0],st.o[1]];
+  const lg=new Float64Array(P);
+  for(let c=0;c<P;++c){const rc=ucol(c,pr);lg[c]=st.o[0]*rc[0]+st.o[1]*rc[1];}
+  return Array.from(lg);
+}
+// forward from a FULL 9-dim state at depth 0/1 (types included, so routing responds)
+function fwdFull(d,v,pr){
+  let m;
+  if(d===0){
+    const sc=[(-pr.gam*v[8])*v[2]/Math.sqrt(3),(-pr.gam*v[8])*v[5]/Math.sqrt(3),
+              (-pr.gam*v[8])*v[8]/Math.sqrt(3)];
+    const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
+    const w=e.map(x=>x/z);
+    m=[w[0]*v[0]+w[1]*v[3]+w[2]*v[6],w[0]*v[1]+w[1]*v[4]+w[2]*v[7]];
+  } else m=[v[6],v[7]];
+  let ox=0,oy=0;
+  for(let j=0;j<MLPN;++j){
+    const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
+    ox+=h*Math.cos(2*UPSI[j]+pr.p1);oy+=h*Math.sin(2*UPSI[j]+pr.p1);}
+  const o=[MLPS*ox/(MLPN/2),MLPS*oy/(MLPN/2)];
+  const lg=new Float64Array(P);
+  for(let c=0;c<P;++c){const rc=ucol(c,pr);lg[c]=o[0]*rc[0]+o[1]*rc[1];}
+  return lg;
+}
+let Vcache=null; // {key, ML:[per-depth mean lens], means:[state means], dbar:[disp means]}
+function vprep(){
+  const pr=pget();
+  const key=[pr.a,pr.b,pr.k,pr.p1,pr.p2,pr.g1,pr.g2,pr.gam].join('|');
+  if(Vcache&&Vcache.key===key)return Vcache;
+  const NS=800,eps=1e-4;
+  const ML=[],means=[],dbar=[];
+  const ctxs=[];
+  for(let i=0;i<NS;++i){const idx=Math.floor(i*12769/NS);
+    ctxs.push([Math.floor(idx/P),idx%P]);}
+  for(let d=0;d<5;++d){
+    const dim=d<=2?9:(d===3?2:P);
+    const mean=new Float64Array(dim);
+    for(const [a,b] of ctxs){
+      const st=stateAt(d,a,b,pr);
+      for(let i=0;i<dim;++i)mean[i]+=st[i];}
+    for(let i=0;i<dim;++i)mean[i]/=NS;
+    means.push(mean);
+    let L=null;
+    if(d<=1){
+      L=new Float64Array(P*9);
+      for(const [a,b] of ctxs){
+        const st=stateAt(d,a,b,pr);
+        for(let j=0;j<9;++j){
+          const vp=st.slice(),vm=st.slice();
+          vp[j]+=eps;vm[j]-=eps;
+          const lp=fwdFull(d,vp,pr),lm=fwdFull(d,vm,pr);
+          for(let c=0;c<P;++c)L[c*9+j]+=(lp[c]-lm[c])/(2*eps);}}
+      for(let i=0;i<L.length;++i)L[i]/=NS;
+    } else if(d===2){
+      L=new Float64Array(P*9);
+      for(let c=0;c<P;++c){const rc=ucol(c,pr);L[c*9+6]=rc[0];L[c*9+7]=rc[1];}
+    } else if(d===3){
+      L=new Float64Array(P*2);
+      for(let c=0;c<P;++c){const rc=ucol(c,pr);L[c*2]=rc[0];L[c*2+1]=rc[1];}
+    }
+    ML.push(L);
+    const db=new Float64Array(P);
+    if(d===4){for(let c=0;c<P;++c)db[c]=mean[c];}
+    else{const dim2=d===3?2:9;
+      for(let c=0;c<P;++c){let s2=0;
+        for(let j=0;j<dim2;++j)s2+=L[c*dim2+j]*mean[j];db[c]=s2;}}
+    dbar.push(db);
+  }
+  // blind-zone flags: pre-MLP the mean lens is pure sampling residue
+  const lmax=ML.map(L=>{if(!L)return null;let m=0;
+    for(let i2=0;i2<L.length;++i2)m=Math.max(m,Math.abs(L[i2]));return m;});
+  const ref=lmax[2];
+  const blind=[0,1,2,3,4].map(d=>d<=1&&lmax[d]!==null&&lmax[d]<0.05*ref);
+  Vcache={key,ML,means,dbar,pr,blind};
+  return Vcache;
+}
+function vcos(x,y,m){let d=0,nx=0,ny=0;
+  for(let i=0;i<x.length;++i){const a=x[i]-m[i],b=y[i]-m[i];d+=a*b;nx+=a*a;ny+=b*b;}
+  return d/(Math.sqrt(nx*ny)+1e-30);}
+function vcurves(a1,b1,a2,b2,C){
+  const S=[],D=[];
+  for(let d=0;d<5;++d){
+    const s1=stateAt(d,a1,b1,C.pr),s2=stateAt(d,a2,b2,C.pr);
+    S.push(vcos(s1,s2,C.means[d]));
+    let d1,d2;
+    if(d===4){d1=s1;d2=s2;}
+    else{const dim=d===3?2:9;
+      d1=new Float64Array(P);d2=new Float64Array(P);
+      for(let c=0;c<P;++c){let x=0,y=0;
+        for(let j=0;j<dim;++j){x+=C.ML[d][c*dim+j]*s1[j];y+=C.ML[d][c*dim+j]*s2[j];}
+        d1[c]=x;d2[c]=y;}}
+    D.push(C.blind[d]?null:vcos(d1,d2,C.dbar[d]));
+  }
+  return {S,D};
+}
+function drawV(){
+  const C=vprep(),pr=C.pr;
+  // bands
+  let seed=77;const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
+  const mk=(same)=>{const Ds=[[],[],[],[],[]];
+    for(let t=0;t<150;++t){
+      const a=Math.floor(rnd()*P),b=Math.floor(rnd()*P);
+      let a2=Math.floor(rnd()*P),b2;
+      if(same){if(a2===a)a2=(a2+1)%P;b2=((a+b-a2)%P+P)%P;}
+      else{b2=Math.floor(rnd()*P);if((a2+b2)%P===(a+b)%P)b2=(b2+1)%P;}
+      const c=vcurves(a,b,a2,b2,C);
+      for(let l=0;l<5;++l)if(c.D[l]!==null)Ds[l].push(c.D[l]);}
+    const pct=(arr,q)=>{if(!arr.length)return null;
+      const s2=[...arr].sort((x,y)=>x-y);
+      return s2[Math.floor(q*(s2.length-1))];};
+    return {lo:Ds.map(x=>pct(x,.1)),hi:Ds.map(x=>pct(x,.9))};};
+  const bs=mk(true),bd=mk(false);
+  const c=vcurves(pr.a,pr.b,V.a2,V.b2,C);
+  const cv=$('Vchart'),cx=cv.getContext('2d');
+  cx.clearRect(0,0,cv.width,cv.height);
+  const x0=60,x1=cv.width-20,y0=18,y1=cv.height-40,ymin=-1.05,ymax=1.05;
+  const X=l=>x0+(x1-x0)*l/4,Y=v=>y1-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*(y1-y0);
+  cx.strokeStyle='#ddd';
+  for(const g of [-1,-0.5,0,0.5,1]){cx.beginPath();cx.moveTo(x0,Y(g));cx.lineTo(x1,Y(g));cx.stroke();
+    cx.fillStyle='#999';cx.font='11px sans-serif';cx.fillText(g.toFixed(1),x0-32,Y(g)+4);}
+  cx.fillStyle='#555';
+  for(let l=0;l<5;++l)cx.fillText(VLBL[l],X(l)-24,y1+16);
+  // the blind zone: mean lens ≡ 0 before mlp-out — D undefined by theorem
+  const firstLive=C.blind.findIndex(b=>!b)===-1?0:C.blind.indexOf(false);
+  if(C.blind[0]){cx.fillStyle='rgba(43,95,168,.06)';
+    cx.fillRect(X(0)-14,y0,X(1.5)-X(0)+14,y1-y0);
+    cx.fillStyle='#2b5fa8';cx.font='11px sans-serif';
+    cx.fillText('blind zone: mean lens ≡ 0 (pure transport, no value-composition) — D does not exist',X(0)-8,y0+12);}
+  const band=(bb,col)=>{cx.fillStyle=col;cx.beginPath();
+    let started=false;
+    for(let l=0;l<5;++l)if(bb.lo[l]!==null){
+      started?cx.lineTo(X(l),Y(bb.lo[l])):cx.moveTo(X(l),Y(bb.lo[l]));started=true;}
+    for(let l=4;l>=0;--l)if(bb.hi[l]!==null)cx.lineTo(X(l),Y(bb.hi[l]));
+    cx.closePath();cx.fill();};
+  band(bs,'rgba(76,120,168,.20)');band(bd,'rgba(110,110,110,.20)');
+  const line=(v,col,w)=>{cx.strokeStyle=col;cx.lineWidth=w;cx.beginPath();
+    let pen=false;
+    for(let l=0;l<5;++l){if(v[l]===null){pen=false;continue;}
+      pen?cx.lineTo(X(l),Y(v[l])):cx.moveTo(X(l),Y(v[l]));pen=true;}
+    cx.stroke();
+    for(let l=0;l<5;++l)if(v[l]!==null){cx.fillStyle=col;cx.beginPath();cx.arc(X(l),Y(v[l]),3.2,0,7);cx.fill();}};
+  line(c.S,'#dc8232',2.4);line(c.D,'#2b5fa8',2.8);
+  cx.font='12px sans-serif';
+  cx.fillStyle='#2b5fa8';cx.fillText('D(ℓ) — disposition, mean lens (your pair)',x0+8,y0+12);
+  cx.fillStyle='#dc8232';cx.fillText('S(ℓ) — state (your pair)',x0+8,y0+28);
+  cx.fillStyle='#777';cx.fillText('bands: D over 150 same-sum (blue) / 150 diff-sum (grey) pairs — same-sum snaps to exactly 1 at mlp-out; diff-sum spans wide (one-frequency margin)',x0+8,y0+44);
+  const s1=(pr.a+pr.b)%P,s2v=(V.a2+V.b2)%P;
+  $('Vverdict').innerHTML=`${pr.a}+${pr.b} ≡ <b>${s1}</b> vs ${V.a2}+${V.b2} ≡ <b>${s2v}</b>`+
+    ` (${s1===s2v?'<span style="color:#2c8a3d">same</span>':'<span style="color:#c33939">different</span>'})`;
+}
+$('Va2').addEventListener('input',ev=>{V.a2=+ev.target.value;
+  $('Va2V').textContent=ev.target.value;drawV();});
+$('Vb2').addEventListener('input',ev=>{V.b2=+ev.target.value;
+  $('Vb2V').textContent=ev.target.value;drawV();});
+$('Vsame').addEventListener('click',()=>{const pr=pget();
+  V.b2=(((pr.a+pr.b-V.a2)%P)+P)%P;
+  $('Vb2').value=V.b2;$('Vb2V').textContent=V.b2;drawV();});
+
 // follow Panel 6's controls live
 for(const id of ['Fa','Fb','Fk','Fp1','Fp2','Fg1','Fg2','Fgam','Fs2','Fortho','Fideal']){
   const e=$(id);
-  if(e){e.addEventListener('input',drawU);e.addEventListener('click',()=>setTimeout(drawU,0));}
+  if(e){e.addEventListener('input',()=>{drawU();drawV();});e.addEventListener('click',()=>setTimeout(()=>{drawU();drawV();},0));}
 }
 drawU();
+setTimeout(drawV,60);
 })();
 </script>"""
 
