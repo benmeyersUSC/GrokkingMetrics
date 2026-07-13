@@ -62,10 +62,11 @@ button:hover{background:#f0f3f9}
 .stickyparams .ctl{flex-wrap:nowrap}
 </style></head><body>
 <header><h1>The Circle Algorithm</h1>
-<p>Interactive companion to the grokked mod-113 network. Six pictures: the winding map,
+<p>Interactive companion to the grokked mod-113 network. Seven pictures: the winding map,
 the dials that store it, the DFT that finds it, the interference that answers with it,
-the whole algorithm run end-to-end in plain code — and a minimal two-dial machine you
-can build yourself, curse with bad phases, and heal.</p>
+the whole algorithm run end-to-end in plain code, a minimal two-dial machine you
+can build yourself, curse with bad phases, and heal — and the half-angle arrow attention
+hands the MLP, warts included.</p>
 </header><div class="wrap">
 
 <!-- ══════════ PANEL A ══════════ -->
@@ -344,6 +345,43 @@ the truth, when they disagree · hover any cell</div>
 <div id="Ftip" style="position:fixed;pointer-events:none;background:#141a26;color:#fff;
 font-size:12px;padding:5px 9px;border-radius:7px;display:none;z-index:9;max-width:330px;
 line-height:1.5"></div>
+
+<!-- ══════════ PANEL G ══════════ -->
+<div class="card"><h2>7 · What attention hands the MLP — the half-angle arrow, and its warts</h2>
+<p class="sub">Attention is transport: it drops (images of) a's point and b's point into
+the "=" slot. On each frequency circle the slot then holds their <b>vector sum</b>, and
+sum-to-product does something lovely and treacherous:
+cos θ<sub>a</sub> + cos θ<sub>b</sub> = 2 cos Δ · cos σ (same for sin), with
+σ = (θ<sub>a</sub>+θ<sub>b</sub>)/2 the <b>half-angle of the answer</b> and
+Δ = (θ<sub>a</sub>−θ<sub>b</sub>)/2 the half-difference. So the deposited arrow
+<b>points at the half-angle</b> — but its <b>length is 2 cos Δ, signed</b>: it breathes
+with how far apart the operands sit, vanishes when they're a half-turn apart, and when
+cos Δ &lt; 0 it <i>flips</i> to point at σ+π. Any linear reader (the mean lens at
+attn-out) sees direction × that unreliable gain — which is exactly why the attn-out
+disposition band in the real-model experiment is wide (0.47–0.94 within a sum-class).
+The MLP's squaring fixes both warts at once: doubling the angle sends σ and σ+π to the
+<b>same</b> 2σ (the flip is erased identically), and the gain becomes cos²Δ ≥ 0 (no more
+sign). Direction becomes class-pure; only a harmless amplitude ripple survives — the
+mlp-out band tightens to 0.92–0.98. Drag b and watch the left arrow breathe and flip
+while the right arrow never leaves the answer peg.</p>
+<div class="row"><div>
+<div style="font-size:13px;font-weight:640;margin-bottom:4px">what attention deposits: a⃗ + b⃗ = 2cosΔ · (cos σ, sin σ)</div>
+<canvas id="cvG" width="430" height="430"></canvas>
+</div><div>
+<div style="font-size:13px;font-weight:640;margin-bottom:4px">after the MLP squares: gain cos²Δ ≥ 0, direction 2σ = θ<sub>a</sub>+θ<sub>b</sub></div>
+<canvas id="cvG2" width="430" height="430"></canvas>
+</div></div>
+<div class="ctl">a <input type="range" id="Ga" min="0" max="112" value="12"><span class="val" id="GaV">12</span>
+ &nbsp; b <input type="range" id="Gb" min="0" max="112" value="73"><span class="val" id="GbV">73</span>
+ &nbsp; k <input type="range" id="Gk" min="1" max="56" value="5"><span class="val" id="GkV">5</span>
+ &nbsp; <button id="Gplay">▶ sweep within the class (a+b held fixed)</button></div>
+<div class="legend" id="Ginfo" style="font-size:13px;line-height:1.9"></div>
+<div class="legend">
+<span class="dot" style="background:#1f77b4"></span>a's point &nbsp;
+<span class="dot" style="background:#2ca02c"></span>b's point &nbsp;
+<span class="dot" style="background:#1f9e89"></span>deposited arrow (half-angle σ, gain 2cosΔ) &nbsp;
+<span class="dot" style="background:#d62728"></span>answer peg (a+b) mod 113</div>
+</div>
 
 </div><script>
 "use strict";
@@ -1391,4 +1429,81 @@ cvFu.addEventListener("mousemove",e=>{
 });
 for(const cv of [cvFe,cvFu]) cv.addEventListener("mouseleave",()=>Ftip.style.display="none");
 drawF();
+
+/* ───────── Panel G ───────── */
+const cvG=$("cvG"), gctx=cvG.getContext("2d");
+const cvG2=$("cvG2"), gctx2=cvG2.getContext("2d");
+function angXY(theta,cx,cy,R){const t=Math.PI/2-theta; return [cx+R*Math.cos(t), cy-R*Math.sin(t)];}
+function garrow(ctx,cx,cy,x,y,col,w){
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=w;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.stroke();
+  const ang=Math.atan2(y-cy,x-cx), hl=9;
+  ctx.beginPath(); ctx.moveTo(x,y);
+  ctx.lineTo(x-hl*Math.cos(ang-0.42), y-hl*Math.sin(ang-0.42));
+  ctx.lineTo(x-hl*Math.cos(ang+0.42), y-hl*Math.sin(ang+0.42));
+  ctx.closePath(); ctx.fill();
+}
+function gbase(ctx,cx,cy,R){
+  ctx.clearRect(0,0,430,430);
+  ctx.strokeStyle="#dde3ee"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,TAU); ctx.stroke();
+  ctx.fillStyle="#c6cede";
+  for(let i=0;i<P;i++){const [x,y]=pegXY(i,cx,cy,R);
+    ctx.beginPath(); ctx.arc(x,y,1.6,0,TAU); ctx.fill();}
+}
+function drawG(){
+  const a=+$("Ga").value, b=+$("Gb").value, k=+$("Gk").value;
+  $("GaV").textContent=a; $("GbV").textContent=b; $("GkV").textContent=k;
+  const cx=215,cy=215,R=185;
+  const tha=TAU*k*a/P, thb=TAU*k*b/P;
+  const sg=(tha+thb)/2, dl=(tha-thb)/2, gain=2*Math.cos(dl);
+
+  // left: the deposit
+  gbase(gctx,cx,cy,R);
+  const [ax,ay]=angXY(tha,cx,cy,R), [bx,by]=angXY(thb,cx,cy,R);
+  gctx.strokeStyle="rgba(31,119,180,.45)"; gctx.lineWidth=1.2;
+  gctx.beginPath(); gctx.moveTo(cx,cy); gctx.lineTo(ax,ay); gctx.stroke();
+  gctx.strokeStyle="rgba(44,160,44,.45)";
+  gctx.beginPath(); gctx.moveTo(cx,cy); gctx.lineTo(bx,by); gctx.stroke();
+  gctx.fillStyle="#1f77b4"; gctx.beginPath(); gctx.arc(ax,ay,6,0,TAU); gctx.fill();
+  gctx.fillStyle="#2ca02c"; gctx.beginPath(); gctx.arc(bx,by,6,0,TAU); gctx.fill();
+  gctx.fillStyle="#333"; gctx.font="12px sans-serif";
+  gctx.fillText("a",ax+8,ay-4); gctx.fillText("b",bx+8,by-4);
+  // dashed ray at the true half-angle sigma
+  const [sx,sy]=angXY(sg,cx,cy,R);
+  gctx.strokeStyle="rgba(31,158,137,.5)"; gctx.setLineDash([5,5]); gctx.lineWidth=1.2;
+  gctx.beginPath(); gctx.moveTo(cx,cy); gctx.lineTo(sx,sy); gctx.stroke(); gctx.setLineDash([]);
+  gctx.fillStyle="#1f9e89"; gctx.fillText("σ",sx+6,sy);
+  // the deposited arrow: (a-vec + b-vec) scaled to R/2 per unit
+  const vx=(ax-cx)+(bx-cx), vy=(ay-cy)+(by-cy);
+  garrow(gctx,cx,cy,cx+vx/2,cy+vy/2,"#1f9e89",3.4);
+  // right: after squaring
+  gbase(gctx2,cx,cy,R);
+  const ansPeg=(k*(a+b))%P;
+  const [rx,ry]=pegXY(ansPeg,cx,cy,R);
+  gctx2.fillStyle="#d62728"; gctx2.beginPath(); gctx2.arc(rx,ry,7,0,TAU); gctx2.fill();
+  gctx2.fillStyle="#333"; gctx2.font="12px sans-serif";
+  gctx2.fillText("(a+b) mod 113 = "+((a+b)%P),Math.min(rx+9,320),ry-6);
+  const g2=Math.cos(dl)*Math.cos(dl);
+  const [qx,qy]=angXY(2*sg,cx,cy,R*(0.15+0.75*g2));
+  garrow(gctx2,cx,cy,qx,qy,"#d62728",3.4);
+  // readout
+  const flip=gain<0;
+  $("Ginfo").innerHTML=
+    `θ<sub>a</sub> = 2πk·${a}/113, θ<sub>b</sub> = 2πk·${b}/113 &nbsp;·&nbsp; `+
+    `half-angle σ = (θ<sub>a</sub>+θ<sub>b</sub>)/2 &nbsp;·&nbsp; `+
+    `gain 2cosΔ = <b style="color:${flip?'#c33939':'#1f9e89'}">${gain.toFixed(2)}</b>`+
+    (flip?` — <b style="color:#c33939">FLIPPED: the arrow points at σ+π; a linear reader is
+     fooled about the half-angle</b>`:``)+
+    (Math.abs(gain)<0.25?` — <b>nearly vanished: this frequency's evidence is missing</b>`:``)+
+    `<br>after squaring: gain cos²Δ = <b>${g2.toFixed(2)}</b> ≥ 0, direction 2σ = θ<sub>a</sub>+θ<sub>b</sub>`+
+    ` — flips gone, always on the answer peg. Sweep within the class: the left arrow breathes`+
+    ` and flips (that's the attn-out band); the right one never moves (that's the mlp-out snap).`;
+}
+for(const id of ["Ga","Gb","Gk"]) $(id).addEventListener("input",drawG);
+let GT=null;
+$("Gplay").onclick=()=>{ if(GT){clearInterval(GT);GT=null;$("Gplay").textContent="▶ sweep within the class (a+b held fixed)";return;}
+  $("Gplay").textContent="⏸"; GT=setInterval(()=>{
+    $("Ga").value=(+$("Ga").value+1)%P; $("Gb").value=(+$("Gb").value+P-1)%P; drawG(); },120); };
+drawG();
 </script></body></html>

@@ -673,6 +673,9 @@ operand angles (transport complete), but any linear read of it is still additive
 θ_a, θ_b; the sum-feature cos(θ_a+θ_b) is born in the MLP's products, so D at attn-out
 should improve only modestly and snap only at mlp-out. If D partially snaps at attn-out
 instead, that's evidence some multiplication already happens inside attention.
+(Outcome: partial snap — attention deposits an arrow at the <i>half-angle</i> of the
+answer whose signed gain 2cosΔ breathes and flips with |a−b|; see "the half-angle arrow"
+panel in mode ② for the trig behind the wide attn-out band.)
 (2) S(mlp-out) stays visibly below 1 while D(mlp-out) ≈ 1: <i>different latents, identical
 disposition</i>. (3) At the readout the state itself merges (the readout ≈ the circle-point
 for a+b) — the network has <i>forgotten the operands</i>, not just routed past them. (4) At
@@ -1214,9 +1217,9 @@ def main() -> int:
     exp_markup, panel_script = exp_body.split("<script>", 1)
     panel_script = panel_script.rsplit("</script>", 1)[0]
     exp_inner = exp_markup.split('<div class="wrap">', 1)[1].rsplit("</div>", 1)[0]
-    _panels = [c.strip() for c in re.split(r"<!-- ═+ PANEL [A-F] ═+ -->", exp_inner) if c.strip()]
-    assert len(_panels) == 6, f"expected 6 circle panels, found {len(_panels)}"
-    PAN1, PAN2, PAN3, PAN4, PAN5, PAN6 = _panels
+    _panels = [c.strip() for c in re.split(r"<!-- ═+ PANEL [A-G] ═+ -->", exp_inner) if c.strip()]
+    assert len(_panels) == 7, f"expected 7 circle panels, found {len(_panels)}"
+    PAN1, PAN2, PAN3, PAN4, PAN5, PAN6, PAN7 = _panels
 
     seed_dirs = sorted((p for p in ENS.glob("seed_*") if (p / "metrics.csv").exists()),
                        key=lambda p: int(p.name.split("_")[1]))
@@ -1255,7 +1258,7 @@ def main() -> int:
 
     # ── the three modes ──────────────────────────────────────────────────────
     mode_paper = ARITHMETIC_CARD + PAN1 + PAN2 + PAN5
-    mode_toy = PAN6
+    mode_toy = PAN6 + PAN7
     mode_real = f"""
 <div class='card'><h2>What happened here</h2>
 <p class='sub'>Modular addition, (a + b) mod 113, trained on 30% of all pairs with heavy
