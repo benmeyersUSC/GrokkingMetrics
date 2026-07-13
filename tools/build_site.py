@@ -913,6 +913,38 @@ lens can see at attn-out.</p>
 <div id='Tverdict' style='font-weight:640;margin:6px 0'></div>
 <canvas id='Tchart' width='1140' height='330'></canvas>
 <div id='Ttable' style='margin-top:10px;overflow-x:auto'></div>
+<h4 style='margin-top:18px'>The lens object itself — the two-dial machine's full L, 113 × 3, at every depth of the "=" latent</h4>
+<p class='sub'>This is the lens of <b>the toy transformer of Panel 6</b> — d<sub>model</sub> = 3:
+two dials (x, y) plus the <b>type channel</b> (+1 for numbers, −1 for "="), one frequency
+k = 1, softmax attention that routes <i>by type</i> (W<sub>Q</sub>/W<sub>K</sub> read only t;
+W<sub>V</sub> passes only x, y), five ReLUs that double the angle, frozen candidate rows.
+L<sub>ℓ</sub> = ∂logits/∂h<sub>=</sub> at depth ℓ: <b>113 rows (candidate answers) × 3 columns
+(x, y, type)</b>, exact for this context. Watch the <b>live column migrate</b>: at
+<b>embed-out</b> the "="-latent's only causal channel is its <i>type</i> — that's what
+summons a and b — so the type column carries the routing sensitivity while x,y are nearly
+dead (the "=" token contributes ~0 value weight). After attention the roles flip
+<i>exactly</i>: the type column is identically zero (nothing downstream reads it) and the
+x,y columns light up as sinusoids down the vocab axis — the frozen candidate circle,
+pulled back through the doubler. At <b>mlp-out/readout</b> the matrix freezes into the
+candidate rows themselves and stops depending on your sliders. And the <b>routing γ</b>
+slider replays a real finding: as the softmax saturates, ∂(weights)/∂(type) → 0 and the
+embed-out type column <i>dies</i> — a saturated router is invisible to gradients, which is
+precisely the attn.Q leverage suppression we measured in the trained net. Cursed phases
+(the Two-Dial Parable) bend the sinusoids into the elliptical junk — heal restores them.</p>
+<div class='ctl'>a <input type='range' id='Ua' min='0' max='112' value='81'><span class='val' id='UaV'>81</span>
+ &nbsp; b <input type='range' id='Ub' min='0' max='112' value='41'><span class='val' id='UbV'>41</span>
+ &nbsp; φ₁ <input type='range' id='Up1' min='0' max='628' value='0'><span class='val' id='Up1V'>0.00</span>
+ &nbsp; φ₂ <input type='range' id='Up2' min='0' max='628' value='157'><span class='val' id='Up2V'>1.57</span>
+ &nbsp; <button id='Uheal' class='jmode'>heal</button>
+ &nbsp; routing γ <input type='range' id='Ugam' min='5' max='120' value='40'><span class='val' id='UgamV'>4.0</span></div>
+<div class='ctl'>depth:
+ <button class='jmode ub on' data-b='0'>embed-out</button><button class='jmode ub' data-b='1'>attn-out</button><button class='jmode ub' data-b='2'>mlp-out</button><button class='jmode ub' data-b='3'>readout (rows)</button></div>
+<div style='display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start'>
+<canvas id='Umat' width='430' height='470'></canvas>
+<canvas id='Uhvec' width='170' height='470'></canvas>
+<div style='flex:1;min-width:420px'><canvas id='Ulh' width='460' height='470'></canvas></div>
+</div>
+<div class='legend' id='Uinfo' style='font-size:13px;line-height:1.8'></div>
 </div>
 <script>
 (function(){
@@ -1029,6 +1061,155 @@ function draw(){
      the trained net's =-slot states bottom out near −0.56 for the same reason, but its
      <i>disposition</i> floor stays at +0.71 — the product channel doesn't flip.</p>`;
 }
+// ── the two-dial machine's full lens L (113 × 3), per depth of the "=" latent ─
+const U={a:81,b:41,p1:0,p2:Math.PI/2,gam:4,depth:0};
+const MLPN=5,MLPS=3*Math.PI/5;
+const UPSI=[...Array(MLPN)].map((_,j)=>TAU*j/MLPN);
+function ucol(x){const t=TAU*x/P;
+  return [Math.cos(t-U.p1),Math.cos(t-U.p2)];}
+// forward from depth d with the "=" latent overridden by v (length 3; readout: 2)
+function ufwd(d,v){
+  let m,t=v[2];
+  if(d===0){ // embed-out: v = the "=" token's embedded latent; attention routes by type
+    const ca=ucol(U.a),cb=ucol(U.b);
+    const res=[[ca[0],ca[1],1],[cb[0],cb[1],1],[v[0],v[1],v[2]]];
+    // Q_= = (0,0,-gam*t_=); K_j = (0,0,t_j); score(=,j) = -gam*t_= * t_j / sqrt(3)
+    const sc=res.map(r=>(-U.gam*v[2])*r[2]/Math.sqrt(3));
+    const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
+    const w=e.map(x=>x/z);
+    m=[w[0]*res[0][0]+w[1]*res[1][0]+w[2]*res[2][0],
+       w[0]*res[0][1]+w[1]*res[1][1]+w[2]*res[2][1]];
+  } else m=[v[0],v[1]];
+  let o;
+  if(d<=1){ // through the 5-ReLU doubler (output phase-locked to phi1)
+    let ox=0,oy=0;
+    for(let j=0;j<MLPN;++j){
+      const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
+      ox+=h*Math.cos(2*UPSI[j]+U.p1);oy+=h*Math.sin(2*UPSI[j]+U.p1);}
+    o=[MLPS*ox/ (MLPN/2) ,MLPS*oy/(MLPN/2)];
+  } else o=m;
+  const lg=new Float64Array(P);
+  for(let c=0;c<P;++c){const rc=ucol(c);lg[c]=o[0]*rc[0]+o[1]*rc[1];}
+  return lg;
+}
+function ulatent(d){ // the actual "=" latent at depth d for the current context
+  if(d===0)return [0,0,-1];
+  const base=ufwdState();
+  if(d===1)return [base.m[0],base.m[1],-1];
+  return [base.o[0],base.o[1],-1];
+}
+function ufwdState(){
+  const ca=ucol(U.a),cb=ucol(U.b);
+  const sc=[U.gam/Math.sqrt(3),U.gam/Math.sqrt(3),-U.gam/Math.sqrt(3)];
+  const mx=Math.max(...sc),e=sc.map(x=>Math.exp(x-mx)),z=e[0]+e[1]+e[2];
+  const w=e.map(x=>x/z);
+  const m=[w[0]*ca[0]+w[1]*cb[0],w[0]*ca[1]+w[1]*cb[1]];
+  let ox=0,oy=0;
+  for(let j=0;j<MLPN;++j){
+    const h=Math.max(m[0]*Math.cos(UPSI[j])+m[1]*Math.sin(UPSI[j]),0);
+    ox+=h*Math.cos(2*UPSI[j]+U.p1);oy+=h*Math.sin(2*UPSI[j]+U.p1);}
+  return {m,o:[MLPS*ox/(MLPN/2),MLPS*oy/(MLPN/2)],w};
+}
+function ulens(d){ // exact-to-machine central differences over the 3 latent dims
+  const cols=d===3?2:3;
+  const h0=d===3?ufwdState().o:ulatent(d);
+  const L=new Float64Array(P*cols);
+  if(d>=2){ // downstream is the frozen rows (mlp-out passes o straight to readout)
+    for(let c=0;c<P;++c){const rc=ucol(c);
+      L[c*cols]=rc[0];L[c*cols+1]=rc[1];if(cols===3)L[c*cols+2]=0;}
+    return {L,cols,h:h0};
+  }
+  const eps=1e-5;
+  for(let j=0;j<3;++j){
+    const vp=h0.slice(),vm=h0.slice();
+    vp[j]+=eps;vm[j]-=eps;
+    const lp=ufwd(d,vp),lm=ufwd(d,vm);
+    for(let c=0;c<P;++c)L[c*3+j]=(lp[c]-lm[c])/(2*eps);
+  }
+  return {L,cols:3,h:h0};
+}
+const UCOLS=['x (dial 1)','y (dial 2)','type'];
+function drawU(){
+  const d=U.depth,r=ulens(d);
+  const mc=$('Umat').getContext('2d'),hc=$('Uhvec').getContext('2d'),lc=$('Ulh').getContext('2d');
+  mc.clearRect(0,0,430,470);hc.clearRect(0,0,170,470);lc.clearRect(0,0,460,470);
+  const top=30,bot=452,cellH=(bot-top)/P,cw=110;
+  let mx=1e-9;for(let i=0;i<r.L.length;++i)mx=Math.max(mx,Math.abs(r.L[i]));
+  for(let c=0;c<P;++c)for(let j=0;j<r.cols;++j){
+    const v=r.L[c*r.cols+j]/mx;
+    mc.fillStyle=v>=0?`rgba(180,40,50,${Math.min(1,v)})`:`rgba(40,80,180,${Math.min(1,-v)})`;
+    mc.fillRect(60+j*cw,top+c*cellH,cw-6,Math.ceil(cellH));}
+  // white profile curve inside each column: the value as a function of c
+  for(let j=0;j<r.cols;++j){
+    mc.strokeStyle='rgba(255,255,255,.9)';mc.lineWidth=1.2;mc.beginPath();
+    for(let c=0;c<P;++c){
+      const v=r.L[c*r.cols+j]/mx;
+      const x=60+j*cw+(cw-6)/2+v*(cw-10)/2,y=top+c*cellH+cellH/2;
+      c?mc.lineTo(x,y):mc.moveTo(x,y);}
+    mc.stroke();}
+  mc.fillStyle='#555';mc.font='11px sans-serif';
+  for(let j=0;j<r.cols;++j)mc.fillText(UCOLS[j],60+j*cw+8,16);
+  mc.save();mc.translate(14,top+P*cellH/2);mc.rotate(-Math.PI/2);
+  mc.fillText('candidate answer c = 0 … 112',-56,0);mc.restore();
+  mc.fillText('max|entry| = '+mx.toFixed(3),60,bot+14);
+  // h strip: the latent itself, 3 fat cells with values
+  hc.fillStyle='#555';hc.font='11px sans-serif';hc.fillText('h_= (this latent)',26,16);
+  let hmx=1e-9;for(const v of r.h)hmx=Math.max(hmx,Math.abs(v));
+  const hh=(bot-top)/r.h.length;
+  for(let i=0;i<r.h.length;++i){const v=r.h[i]/hmx;
+    hc.fillStyle=v>=0?`rgba(180,40,50,${Math.min(1,Math.abs(v))}`+')':`rgba(40,80,180,${Math.min(1,-v)})`;
+    hc.fillRect(30,top+i*hh+3,60,hh-6);
+    hc.fillStyle='#111';hc.font='12px ui-monospace,monospace';
+    hc.fillText(r.h[i].toFixed(3),98,top+i*hh+hh/2+4);
+    hc.fillStyle='#555';hc.font='10px sans-serif';
+    hc.fillText(UCOLS[i]||'',30,top+i*hh+hh/2-10);}
+  // L·h bars (horizontal, aligned with matrix rows) + true logits ghost
+  const dvec=new Float64Array(P);
+  for(let c=0;c<P;++c){let s=0;
+    for(let j=0;j<r.cols;++j)s+=r.L[c*r.cols+j]*r.h[j];dvec[c]=s;}
+  const truelg=ufwd(3,ufwdState().o.concat([-1]));
+  let dm=1e-9;for(let c=0;c<P;++c)dm=Math.max(dm,Math.abs(dvec[c]),Math.abs(truelg[c]));
+  const mid=230,ans=(U.a+U.b)%P;
+  lc.fillStyle='#555';lc.font='11px sans-serif';
+  lc.fillText('L·h_= (bars) vs the model\\'s logits (grey) — green row = (a+b) mod 113 = '+ans,10,16);
+  for(let c=0;c<P;++c){const y=top+c*cellH;
+    const g=truelg[c]/dm*210;
+    lc.fillStyle='rgba(120,120,120,.3)';
+    lc.fillRect(mid+Math.min(0,g),y,Math.abs(g),Math.max(1,cellH-1));
+    const v=dvec[c]/dm*210;
+    lc.fillStyle=c===ans?'#2c8a3d':'#4c78a8';
+    lc.fillRect(mid+Math.min(0,v),y+cellH*0.2,Math.abs(v),Math.max(1,cellH*0.6));}
+  lc.strokeStyle='#ccc';lc.beginPath();lc.moveTo(mid,top);lc.lineTo(mid,bot);lc.stroke();
+  const typemax=r.cols===3?Math.max(...Array.from({length:P},(_,c)=>Math.abs(r.L[c*3+2]))):0;
+  const xymax=Math.max(...Array.from({length:P},(_,c)=>Math.max(Math.abs(r.L[c*r.cols]),Math.abs(r.L[c*r.cols+1]))));
+  $('Uinfo').innerHTML=
+    ['<b>embed-out:</b> the "="-latent is (0, 0, −1) — pure type. Its x,y columns are ~dead '+
+     '(the "=" token wins ~0 value weight); the <b>type column is the routing sensitivity</b>: '+
+     'max|type col| = '+typemax.toFixed(4)+' at γ = '+U.gam.toFixed(1)+
+     '. Slide γ up and watch it die — softmax saturation makes the router invisible to '+
+     'gradients (the toy version of the trained net\\'s attn.Q leverage suppression).',
+     '<b>attn-out:</b> the type column is now <b>exactly zero</b> — nothing downstream reads '+
+     'type (max|type col| = '+typemax.toExponential(1)+'). The x,y columns are the candidate '+
+     'circle pulled back through the doubler at this context\\'s operating point — per-context, '+
+     'they move with your sliders. And L·h ≡ the logits here to machine precision: the ReLU '+
+     'doubler is degree-1 homogeneous (gates locally constant), so Euler gives J·m = f(m) exactly.',
+     '<b>mlp-out:</b> downstream is the frozen rows: L = [row_c | 0], context-free. The '+
+     'sinusoid columns ARE the unembedding circle (cursed phases bend them into the ellipse).',
+     '<b>readout:</b> L = the candidate rows themselves, 113×2 — the lens IS W_U, and '+
+     'L·h ≡ the logits exactly (grey and colored bars coincide).'][d];
+}
+document.querySelectorAll('.ub').forEach(bt=>bt.addEventListener('click',()=>{
+  U.depth=+bt.dataset.b;
+  document.querySelectorAll('.ub').forEach(o=>o.classList.toggle('on',o===bt));
+  drawU();}));
+const ubind=(id,k,scale)=>$(id).addEventListener('input',ev=>{
+  U[k]=+ev.target.value/(scale||1);
+  $(id+'V').textContent=scale?U[k].toFixed(2):ev.target.value;drawU();});
+ubind('Ua','a');ubind('Ub','b');ubind('Up1','p1',100);ubind('Up2','p2',100);ubind('Ugam','gam',10);
+$('Uheal').addEventListener('click',()=>{U.p1=0;U.p2=Math.PI/2;
+  $('Up1').value=0;$('Up1V').textContent='0.00';
+  $('Up2').value=157;$('Up2V').textContent='1.57';drawU();});
+
 const bind=(id,k)=>$(id).addEventListener('input',ev=>{S0[k]=+ev.target.value;
   $(id+'V').textContent=ev.target.value;draw();});
 bind('Ta','a');bind('Tb','b');bind('Ta2','a2');bind('Tb2','b2');
@@ -1043,6 +1224,7 @@ setTimeout(()=>{
   $('Tverdict').innerHTML+=` · ‖mean lens @ attn-out‖ over all 12,769 contexts = ${nrm.toExponential(1)} ✓ (theorem: 0)`;
 },80);
 draw();
+drawU();
 })();
 </script>"""
 
