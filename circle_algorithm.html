@@ -351,10 +351,12 @@ line-height:1.5"></div>
 <p class="sub">Attention is transport: it drops (images of) a's point and b's point into
 the "=" slot. On each frequency circle the slot then holds their <b>vector sum</b>, and
 sum-to-product does something lovely and treacherous:
-cos θ<sub>a</sub> + cos θ<sub>b</sub> = 2 cos Δ · cos σ (same for sin), with
+cos θ<sub>a</sub> + cos θ<sub>b</sub> = 2 cos Δ · cos σ (same for sin) — so the <b>mean</b>,
+which is what uniform attention takes, is the <b>midpoint of the chord</b> between the two
+points: cos Δ · (cos σ, sin σ), with
 σ = (θ<sub>a</sub>+θ<sub>b</sub>)/2 the <b>half-angle of the answer</b> and
 Δ = (θ<sub>a</sub>−θ<sub>b</sub>)/2 the half-difference. So the deposited arrow
-<b>points at the half-angle</b> — but its <b>length is 2 cos Δ, signed</b>: it breathes
+<b>points at the half-angle</b> — but its <b>length is cos Δ, signed</b>: it breathes
 with how far apart the operands sit, vanishes when they're a half-turn apart, and when
 cos Δ &lt; 0 it <i>flips</i> to point at σ+π. Any linear reader (the mean lens at
 attn-out) sees direction × that unreliable gain — which is exactly why the attn-out
@@ -363,9 +365,17 @@ The MLP's squaring fixes both warts at once: doubling the angle sends σ and σ+
 <b>same</b> 2σ (the flip is erased identically), and the gain becomes cos²Δ ≥ 0 (no more
 sign). Direction becomes class-pure; only a harmless amplitude ripple survives — the
 mlp-out band tightens to 0.92–0.98. Drag b and watch the left arrow breathe and flip
-while the right arrow never leaves the answer peg.</p>
+while the right arrow never leaves the answer peg.
+One honest wrinkle from the <i>trained</i> network: its attention pattern is
+content-dependent (the softmax weights on a and b swing with the operands), so the real
+deposit also carries <b>product</b> terms — attention already does part of the
+multiplying — and the mean lens at attn-out reads mostly that channel, because the
+linearization of anything the MLP is about to <i>square</i> averages to zero across
+contexts (d(x²)/dx spins with x — spin-and-cancel, in Jacobian space). The midpoint
+drawn here is what a <b>pure-transport</b> attention would hand over — and its warts are
+why transport alone could never snap (see <code>tools/dissect_deposit.py</code>).</p>
 <div class="row"><div>
-<div style="font-size:13px;font-weight:640;margin-bottom:4px">what attention deposits: a⃗ + b⃗ = 2cosΔ · (cos σ, sin σ)</div>
+<div style="font-size:13px;font-weight:640;margin-bottom:4px">what attention deposits: (a⃗ + b⃗)/2 = cosΔ · (cos σ, sin σ) — the chord midpoint</div>
 <canvas id="cvG" width="430" height="430"></canvas>
 </div><div>
 <div style="font-size:13px;font-weight:640;margin-bottom:4px">after the MLP squares: gain cos²Δ ≥ 0, direction 2σ = θ<sub>a</sub>+θ<sub>b</sub></div>
@@ -379,7 +389,7 @@ while the right arrow never leaves the answer peg.</p>
 <div class="legend">
 <span class="dot" style="background:#1f77b4"></span>a's point &nbsp;
 <span class="dot" style="background:#2ca02c"></span>b's point &nbsp;
-<span class="dot" style="background:#1f9e89"></span>deposited arrow (half-angle σ, gain 2cosΔ) &nbsp;
+<span class="dot" style="background:#1f9e89"></span>deposited arrow (half-angle σ, gain cosΔ) &nbsp;
 <span class="dot" style="background:#d62728"></span>answer peg (a+b) mod 113</div>
 </div>
 
@@ -1456,7 +1466,7 @@ function drawG(){
   $("GaV").textContent=a; $("GbV").textContent=b; $("GkV").textContent=k;
   const cx=215,cy=215,R=185;
   const tha=TAU*k*a/P, thb=TAU*k*b/P;
-  const sg=(tha+thb)/2, dl=(tha-thb)/2, gain=2*Math.cos(dl);
+  const sg=(tha+thb)/2, dl=(tha-thb)/2, gain=Math.cos(dl);
 
   // left: the deposit
   gbase(gctx,cx,cy,R);
@@ -1492,7 +1502,7 @@ function drawG(){
   $("Ginfo").innerHTML=
     `θ<sub>a</sub> = 2πk·${a}/113, θ<sub>b</sub> = 2πk·${b}/113 &nbsp;·&nbsp; `+
     `half-angle σ = (θ<sub>a</sub>+θ<sub>b</sub>)/2 &nbsp;·&nbsp; `+
-    `gain 2cosΔ = <b style="color:${flip?'#c33939':'#1f9e89'}">${gain.toFixed(2)}</b>`+
+    `gain cosΔ = <b style="color:${flip?'#c33939':'#1f9e89'}">${gain.toFixed(2)}</b>`+
     (flip?` — <b style="color:#c33939">FLIPPED: the arrow points at σ+π; a linear reader is
      fooled about the half-angle</b>`:``)+
     (Math.abs(gain)<0.25?` — <b>nearly vanished: this frequency's evidence is missing</b>`:``)+
