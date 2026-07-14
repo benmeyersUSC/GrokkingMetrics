@@ -1236,7 +1236,8 @@ function drawV(){
   if(C.blind[0]){cx.fillStyle='rgba(43,95,168,.06)';
     cx.fillRect(X(0)-14,y0,X(1.5)-X(0)+14,y1-y0);
     cx.fillStyle='#2b5fa8';cx.font='11px sans-serif';
-    cx.fillText('blind zone: mean lens ≡ 0 (pure transport, no value-composition) — D does not exist',X(0)-8,y0+12);}
+    cx.fillText('blind zone: mean lens ≡ 0 (pure transport,',X(0)-8,y1-34);
+    cx.fillText('no value-composition) — D does not exist',X(0)-8,y1-20);}
   const band=(bb,col)=>{cx.fillStyle=col;cx.beginPath();
     let started=false;
     for(let l=0;l<5;++l)if(bb.lo[l]!==null){
